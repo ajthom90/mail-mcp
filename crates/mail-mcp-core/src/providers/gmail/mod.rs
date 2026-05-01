@@ -1,6 +1,7 @@
 //! Gmail provider (REST API).
 
 mod client;
+mod compose;
 mod labels;
 mod messages;
 mod parse;
