@@ -3,6 +3,7 @@
 pub mod accounts;
 pub mod cache;
 pub mod error;
+pub mod ipc;
 pub mod logging;
 pub mod oauth;
 pub mod paths;
