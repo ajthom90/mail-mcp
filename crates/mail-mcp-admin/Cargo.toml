@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[[bin]]
+name = "mail-mcp-admin"
+path = "src/main.rs"
+
 [dependencies]
 mail-mcp-core = { path = "../mail-mcp-core" }
 anyhow.workspace = true
