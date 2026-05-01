@@ -7,6 +7,7 @@ pub mod logging;
 pub mod oauth;
 pub mod paths;
 pub mod permissions;
+pub mod providers;
 pub mod secrets;
 pub mod storage;
 pub mod types;
