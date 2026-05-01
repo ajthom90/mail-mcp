@@ -96,7 +96,10 @@ mod tests {
         let q2 = q.clone();
         let r2 = req.clone();
         tokio::spawn(async move { q2.enqueue(r2).await });
-        let evt = tokio::time::timeout(Duration::from_secs(1), rx.recv()).await.unwrap().unwrap();
+        let evt = tokio::time::timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
         match evt {
             ApprovalEvent::Requested(p) => {
                 assert_eq!(p.summary, req.summary);
@@ -170,7 +173,10 @@ pub enum ApprovalOutcome {
 #[derive(Debug, Clone)]
 pub enum ApprovalEvent {
     Requested(PendingApproval),
-    Resolved { id: ApprovalId, decision: ApprovalDecision },
+    Resolved {
+        id: ApprovalId,
+        decision: ApprovalDecision,
+    },
 }
 
 /// In-memory queue of pending approvals.
@@ -189,7 +195,9 @@ impl ApprovalQueue {
     pub fn new(timeout: Duration) -> Self {
         let (tx, _rx) = broadcast::channel(64);
         Self {
-            inner: Arc::new(Mutex::new(Inner { pending: HashMap::new() })),
+            inner: Arc::new(Mutex::new(Inner {
+                pending: HashMap::new(),
+            })),
             events: tx,
             timeout,
         }
@@ -201,10 +209,7 @@ impl ApprovalQueue {
 
     /// Enqueue a request and return an awaitable future that resolves when the user
     /// decides or the timeout elapses.
-    pub async fn enqueue(
-        &self,
-        request: ApprovalRequest,
-    ) -> (ApprovalId, ApprovalFuture) {
+    pub async fn enqueue(&self, request: ApprovalRequest) -> (ApprovalId, ApprovalFuture) {
         let id = ApprovalId::new();
         let (tx, rx) = oneshot::channel();
         let pending = PendingApproval {

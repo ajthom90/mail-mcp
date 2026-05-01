@@ -25,8 +25,14 @@ mod tests {
         let m = Message {
             id: crate::types::MessageId::from("m-1"),
             thread_id: crate::types::ThreadId::from("t-1"),
-            from: Some(EmailAddress { name: Some("A".into()), email: "a@x".into() }),
-            to: vec![EmailAddress { name: None, email: "b@x".into() }],
+            from: Some(EmailAddress {
+                name: Some("A".into()),
+                email: "a@x".into(),
+            }),
+            to: vec![EmailAddress {
+                name: None,
+                email: "b@x".into(),
+            }],
             cc: vec![],
             bcc: vec![],
             subject: "hi".into(),
@@ -35,7 +41,11 @@ mod tests {
             body_html: None,
             labels: vec![],
             folder: None,
-            flags: MessageFlags { read: true, starred: false, draft: false },
+            flags: MessageFlags {
+                read: true,
+                starred: false,
+                draft: false,
+            },
             attachments: vec![],
             snippet: "hi there".into(),
         };

@@ -48,7 +48,13 @@ mod tests {
         let cfg = cfg(format!("{}/token", server.uri()));
         let client = AuthClient::new(reqwest::Client::new(), cfg, fresh_tokens());
 
-        let resp: serde_json::Value = client.get(&format!("{}/probe", server.uri())).await.unwrap().json().await.unwrap();
+        let resp: serde_json::Value = client
+            .get(&format!("{}/probe", server.uri()))
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
         assert_eq!(resp, serde_json::json!({"ok": true}));
         assert_eq!(client.access_token().await, "AT-1");
     }
@@ -74,7 +80,10 @@ mod tests {
         let cfg = cfg(format!("{}/token", server.uri()));
         let client = AuthClient::new(reqwest::Client::new(), cfg, expired_tokens());
 
-        let resp = client.get(&format!("{}/probe", server.uri())).await.unwrap();
+        let resp = client
+            .get(&format!("{}/probe", server.uri()))
+            .await
+            .unwrap();
         assert!(resp.status().is_success());
         assert_eq!(client.access_token().await, "AT-NEW");
     }
@@ -142,11 +151,19 @@ impl AuthClient {
         self.send(self.http.get(url)).await
     }
 
-    pub async fn post_json<B: serde::Serialize>(&self, url: &str, body: &B) -> Result<reqwest::Response> {
+    pub async fn post_json<B: serde::Serialize>(
+        &self,
+        url: &str,
+        body: &B,
+    ) -> Result<reqwest::Response> {
         self.send(self.http.post(url).json(body)).await
     }
 
-    pub async fn put_json<B: serde::Serialize>(&self, url: &str, body: &B) -> Result<reqwest::Response> {
+    pub async fn put_json<B: serde::Serialize>(
+        &self,
+        url: &str,
+        body: &B,
+    ) -> Result<reqwest::Response> {
         self.send(self.http.put(url).json(body)).await
     }
 

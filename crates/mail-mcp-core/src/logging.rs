@@ -39,9 +39,11 @@ pub fn redact(s: &str) -> String {
     static EMAIL: OnceLock<regex::Regex> = OnceLock::new();
     static CODE: OnceLock<regex::Regex> = OnceLock::new();
     static BEARER: OnceLock<regex::Regex> = OnceLock::new();
-    let email = EMAIL.get_or_init(|| regex::Regex::new(r"\b[\w._%+-]+@[\w.-]+\.[A-Za-z]{2,}\b").unwrap());
+    let email =
+        EMAIL.get_or_init(|| regex::Regex::new(r"\b[\w._%+-]+@[\w.-]+\.[A-Za-z]{2,}\b").unwrap());
     let code = CODE.get_or_init(|| regex::Regex::new(r"\b4/[A-Za-z0-9_\-]{12,}\b").unwrap());
-    let bearer = BEARER.get_or_init(|| regex::Regex::new(r"(?i)bearer\s+[A-Za-z0-9._\-]{20,}").unwrap());
+    let bearer =
+        BEARER.get_or_init(|| regex::Regex::new(r"(?i)bearer\s+[A-Za-z0-9._\-]{20,}").unwrap());
     let s = email.replace_all(s, "[redacted-email]");
     let s = code.replace_all(&s, "[redacted-code]");
     let s = bearer.replace_all(&s, "[redacted-bearer]");

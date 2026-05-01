@@ -44,7 +44,11 @@ impl ProviderRegistry {
     }
 }
 
-pub async fn dispatch(ctx: &DispatchContext, tool: &ToolSpec, args: Value) -> Result<Value, CoreError> {
+pub async fn dispatch(
+    ctx: &DispatchContext,
+    tool: &ToolSpec,
+    args: Value,
+) -> Result<Value, CoreError> {
     if ctx.mcp_paused.load(std::sync::atomic::Ordering::Relaxed) {
         return Err(CoreError::PermissionDenied(
             "MCP is paused — open mail-mcp Settings to resume.".into(),
@@ -58,7 +62,7 @@ pub async fn dispatch(ctx: &DispatchContext, tool: &ToolSpec, args: Value) -> Re
         .await
         .ok_or_else(|| CoreError::NotFound(format!("account {account_id}")))?;
     let perms = Permissions::for_account(&ctx.storage, account_id).await?;
-    let summary = format!("{}", tool.name);
+    let summary = tool.name.to_string();
     let request = ApprovalRequest {
         account: account_id,
         category: tool.category,
@@ -102,7 +106,10 @@ struct SendArgs {
 
 fn addrs(v: &[String]) -> Vec<EmailAddress> {
     v.iter()
-        .map(|s| EmailAddress { email: s.clone(), name: None })
+        .map(|s| EmailAddress {
+            email: s.clone(),
+            name: None,
+        })
         .collect()
 }
 
@@ -137,20 +144,37 @@ async fn execute(provider: &dyn MailProvider, tool: &str, args: Value) -> Result
         "search" => {
             let q = SearchQuery {
                 text: args.get("query").and_then(|v| v.as_str()).map(String::from),
-                folder: args.get("folder_id").and_then(|v| v.as_str()).map(FolderId::from),
-                label: args.get("label_id").and_then(|v| v.as_str()).map(LabelId::from),
+                folder: args
+                    .get("folder_id")
+                    .and_then(|v| v.as_str())
+                    .map(FolderId::from),
+                label: args
+                    .get("label_id")
+                    .and_then(|v| v.as_str())
+                    .map(LabelId::from),
                 limit: args.get("limit").and_then(|v| v.as_u64()).map(|n| n as u32),
-                cursor: args.get("cursor").and_then(|v| v.as_str()).map(String::from),
+                cursor: args
+                    .get("cursor")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
             };
             let res = provider.search(&q).await?;
             Ok(serde_json::to_value(res)?)
         }
         "get_thread" => {
-            let id = ThreadId::from(args.get("thread_id").and_then(|v| v.as_str()).unwrap_or_default());
+            let id = ThreadId::from(
+                args.get("thread_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default(),
+            );
             Ok(serde_json::to_value(provider.get_thread(&id).await?)?)
         }
         "get_message" => {
-            let id = MessageId::from(args.get("message_id").and_then(|v| v.as_str()).unwrap_or_default());
+            let id = MessageId::from(
+                args.get("message_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default(),
+            );
             Ok(serde_json::to_value(provider.get_message(&id).await?)?)
         }
         "list_folders" => Ok(serde_json::to_value(provider.list_folders().await?)?),
@@ -160,7 +184,12 @@ async fn execute(provider: &dyn MailProvider, tool: &str, args: Value) -> Result
             let ids: Vec<MessageId> = args
                 .get("message_ids")
                 .and_then(|v| v.as_array())
-                .map(|a| a.iter().filter_map(|s| s.as_str()).map(MessageId::from).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|s| s.as_str())
+                        .map(MessageId::from)
+                        .collect()
+                })
                 .unwrap_or_default();
             let read = args.get("read").and_then(|v| v.as_bool()).unwrap_or(true);
             provider.mark_read(&ids, read).await?;
@@ -170,9 +199,17 @@ async fn execute(provider: &dyn MailProvider, tool: &str, args: Value) -> Result
             let ids: Vec<MessageId> = args
                 .get("message_ids")
                 .and_then(|v| v.as_array())
-                .map(|a| a.iter().filter_map(|s| s.as_str()).map(MessageId::from).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|s| s.as_str())
+                        .map(MessageId::from)
+                        .collect()
+                })
                 .unwrap_or_default();
-            let on = args.get("starred").and_then(|v| v.as_bool()).unwrap_or(true);
+            let on = args
+                .get("starred")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
             provider.star(&ids, on).await?;
             Ok(serde_json::json!({"ok": true}))
         }
@@ -180,9 +217,18 @@ async fn execute(provider: &dyn MailProvider, tool: &str, args: Value) -> Result
             let ids: Vec<MessageId> = args
                 .get("message_ids")
                 .and_then(|v| v.as_array())
-                .map(|a| a.iter().filter_map(|s| s.as_str()).map(MessageId::from).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|s| s.as_str())
+                        .map(MessageId::from)
+                        .collect()
+                })
                 .unwrap_or_default();
-            let label = LabelId::from(args.get("label_id").and_then(|v| v.as_str()).unwrap_or_default());
+            let label = LabelId::from(
+                args.get("label_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default(),
+            );
             let on = args.get("on").and_then(|v| v.as_bool()).unwrap_or(true);
             provider.label(&ids, &label, on).await?;
             Ok(serde_json::json!({"ok": true}))
@@ -191,9 +237,18 @@ async fn execute(provider: &dyn MailProvider, tool: &str, args: Value) -> Result
             let ids: Vec<MessageId> = args
                 .get("message_ids")
                 .and_then(|v| v.as_array())
-                .map(|a| a.iter().filter_map(|s| s.as_str()).map(MessageId::from).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|s| s.as_str())
+                        .map(MessageId::from)
+                        .collect()
+                })
                 .unwrap_or_default();
-            let folder = FolderId::from(args.get("folder_id").and_then(|v| v.as_str()).unwrap_or_default());
+            let folder = FolderId::from(
+                args.get("folder_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default(),
+            );
             provider.move_to(&ids, &folder).await?;
             Ok(serde_json::json!({"ok": true}))
         }
@@ -201,7 +256,12 @@ async fn execute(provider: &dyn MailProvider, tool: &str, args: Value) -> Result
             let ids: Vec<MessageId> = args
                 .get("message_ids")
                 .and_then(|v| v.as_array())
-                .map(|a| a.iter().filter_map(|s| s.as_str()).map(MessageId::from).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|s| s.as_str())
+                        .map(MessageId::from)
+                        .collect()
+                })
                 .unwrap_or_default();
             provider.archive(&ids).await?;
             Ok(serde_json::json!({"ok": true}))
@@ -210,7 +270,12 @@ async fn execute(provider: &dyn MailProvider, tool: &str, args: Value) -> Result
             let ids: Vec<MessageId> = args
                 .get("message_ids")
                 .and_then(|v| v.as_array())
-                .map(|a| a.iter().filter_map(|s| s.as_str()).map(MessageId::from).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|s| s.as_str())
+                        .map(MessageId::from)
+                        .collect()
+                })
                 .unwrap_or_default();
             provider.trash(&ids).await?;
             Ok(serde_json::json!({"ok": true}))
@@ -219,7 +284,12 @@ async fn execute(provider: &dyn MailProvider, tool: &str, args: Value) -> Result
             let ids: Vec<MessageId> = args
                 .get("message_ids")
                 .and_then(|v| v.as_array())
-                .map(|a| a.iter().filter_map(|s| s.as_str()).map(MessageId::from).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|s| s.as_str())
+                        .map(MessageId::from)
+                        .collect()
+                })
                 .unwrap_or_default();
             provider.untrash(&ids).await?;
             Ok(serde_json::json!({"ok": true}))
@@ -265,7 +335,9 @@ async fn execute(provider: &dyn MailProvider, tool: &str, args: Value) -> Result
                 in_reply_to: None,
                 thread_id: None,
             };
-            provider.update_draft(&DraftId::from(s.draft_id), &input).await?;
+            provider
+                .update_draft(&DraftId::from(s.draft_id), &input)
+                .await?;
             Ok(serde_json::json!({"ok": true}))
         }
         "send_message" => {
@@ -285,7 +357,11 @@ async fn execute(provider: &dyn MailProvider, tool: &str, args: Value) -> Result
             Ok(serde_json::json!({"message_id": id}))
         }
         "send_draft" => {
-            let did = DraftId::from(args.get("draft_id").and_then(|v| v.as_str()).unwrap_or_default());
+            let did = DraftId::from(
+                args.get("draft_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default(),
+            );
             let id = provider.send_draft(&did).await?;
             Ok(serde_json::json!({"message_id": id}))
         }
@@ -309,45 +385,89 @@ mod tests {
     }
     #[async_trait]
     impl MailProvider for FakeProvider {
-        async fn search(&self, _q: &SearchQuery) -> Result<mail_mcp_core::providers::r#trait::SearchResults, CoreError> {
+        async fn search(
+            &self,
+            _q: &SearchQuery,
+        ) -> Result<mail_mcp_core::providers::r#trait::SearchResults, CoreError> {
             *self.last_call.lock().await = Some("search".into());
-            Ok(mail_mcp_core::providers::r#trait::SearchResults { threads: vec![], next_cursor: None })
+            Ok(mail_mcp_core::providers::r#trait::SearchResults {
+                threads: vec![],
+                next_cursor: None,
+            })
         }
-        async fn get_thread(&self, _id: &ThreadId) -> Result<Thread, CoreError> { unimplemented!() }
-        async fn get_message(&self, _id: &MessageId) -> Result<Message, CoreError> { unimplemented!() }
-        async fn list_folders(&self) -> Result<Vec<Folder>, CoreError> { Ok(vec![]) }
-        async fn list_labels(&self) -> Result<Vec<Label>, CoreError> { Ok(vec![]) }
-        async fn list_drafts(&self) -> Result<Vec<DraftSummary>, CoreError> { Ok(vec![]) }
-        async fn mark_read(&self, _ids: &[MessageId], _r: bool) -> Result<(), CoreError> { Ok(()) }
-        async fn star(&self, _ids: &[MessageId], _s: bool) -> Result<(), CoreError> { Ok(()) }
-        async fn label(&self, _ids: &[MessageId], _l: &LabelId, _o: bool) -> Result<(), CoreError> { Ok(()) }
-        async fn move_to(&self, _ids: &[MessageId], _f: &FolderId) -> Result<(), CoreError> { Ok(()) }
-        async fn archive(&self, _ids: &[MessageId]) -> Result<(), CoreError> { Ok(()) }
-        async fn trash(&self, _ids: &[MessageId]) -> Result<(), CoreError> { Ok(()) }
-        async fn untrash(&self, _ids: &[MessageId]) -> Result<(), CoreError> { Ok(()) }
+        async fn get_thread(&self, _id: &ThreadId) -> Result<Thread, CoreError> {
+            unimplemented!()
+        }
+        async fn get_message(&self, _id: &MessageId) -> Result<Message, CoreError> {
+            unimplemented!()
+        }
+        async fn list_folders(&self) -> Result<Vec<Folder>, CoreError> {
+            Ok(vec![])
+        }
+        async fn list_labels(&self) -> Result<Vec<Label>, CoreError> {
+            Ok(vec![])
+        }
+        async fn list_drafts(&self) -> Result<Vec<DraftSummary>, CoreError> {
+            Ok(vec![])
+        }
+        async fn mark_read(&self, _ids: &[MessageId], _r: bool) -> Result<(), CoreError> {
+            Ok(())
+        }
+        async fn star(&self, _ids: &[MessageId], _s: bool) -> Result<(), CoreError> {
+            Ok(())
+        }
+        async fn label(&self, _ids: &[MessageId], _l: &LabelId, _o: bool) -> Result<(), CoreError> {
+            Ok(())
+        }
+        async fn move_to(&self, _ids: &[MessageId], _f: &FolderId) -> Result<(), CoreError> {
+            Ok(())
+        }
+        async fn archive(&self, _ids: &[MessageId]) -> Result<(), CoreError> {
+            Ok(())
+        }
+        async fn trash(&self, _ids: &[MessageId]) -> Result<(), CoreError> {
+            Ok(())
+        }
+        async fn untrash(&self, _ids: &[MessageId]) -> Result<(), CoreError> {
+            Ok(())
+        }
         async fn create_draft(&self, _d: &DraftInput) -> Result<DraftId, CoreError> {
             *self.last_call.lock().await = Some("create_draft".into());
             Ok(DraftId::from("d-fake"))
         }
-        async fn update_draft(&self, _id: &DraftId, _d: &DraftInput) -> Result<(), CoreError> { Ok(()) }
+        async fn update_draft(&self, _id: &DraftId, _d: &DraftInput) -> Result<(), CoreError> {
+            Ok(())
+        }
         async fn send_message(&self, _m: &OutgoingMessage) -> Result<MessageId, CoreError> {
             *self.last_call.lock().await = Some("send_message".into());
             Ok(MessageId::from("m-fake"))
         }
-        async fn send_draft(&self, _id: &DraftId) -> Result<MessageId, CoreError> { Ok(MessageId::from("m-fake")) }
+        async fn send_draft(&self, _id: &DraftId) -> Result<MessageId, CoreError> {
+            Ok(MessageId::from("m-fake"))
+        }
     }
 
     async fn ctx() -> (DispatchContext, AccountId, Arc<FakeProvider>) {
         let tmp = tempfile::tempdir().unwrap();
         let storage = Storage::open(&tmp.path().join("s.db")).await.unwrap();
         std::mem::forget(tmp);
-        let id = AccountStore::create(&storage, &NewAccount {
-            label: "x".into(), provider: ProviderKind::Gmail, email: "x@x".into(),
-            config: serde_json::json!({}), scopes: vec![],
-        }).await.unwrap();
+        let id = AccountStore::create(
+            &storage,
+            &NewAccount {
+                label: "x".into(),
+                provider: ProviderKind::Gmail,
+                email: "x@x".into(),
+                config: serde_json::json!({}),
+                scopes: vec![],
+            },
+        )
+        .await
+        .unwrap();
         Permissions::install_defaults(&storage, id).await.unwrap();
         let providers = ProviderRegistry::new();
-        let fake = Arc::new(FakeProvider { last_call: tokio::sync::Mutex::new(None) });
+        let fake = Arc::new(FakeProvider {
+            last_call: tokio::sync::Mutex::new(None),
+        });
         providers.insert(id, fake.clone()).await;
         let ctx = DispatchContext {
             storage,

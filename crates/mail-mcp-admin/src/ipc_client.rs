@@ -23,10 +23,15 @@ impl IpcClient {
         })
     }
 
-    pub async fn call(&mut self, method: &str, params: serde_json::Value) -> Result<serde_json::Value> {
+    pub async fn call(
+        &mut self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value> {
         let id = self.next_id;
         self.next_id += 1;
-        let req = serde_json::json!({"jsonrpc":"2.0", "id": id, "method": method, "params": params});
+        let req =
+            serde_json::json!({"jsonrpc":"2.0", "id": id, "method": method, "params": params});
         let mut line = serde_json::to_string(&req)?;
         line.push('\n');
         self.writer.write_all(line.as_bytes()).await?;
@@ -57,10 +62,13 @@ impl IpcClient {
             if let Some(err) = resp.error {
                 return Err(anyhow!("daemon error ({}): {}", err.code, err.message));
             }
-            return Ok(resp.result.ok_or_else(|| anyhow!("response missing result"))?);
+            return resp
+                .result
+                .ok_or_else(|| anyhow!("response missing result"));
         }
     }
 
+    #[allow(dead_code)]
     pub async fn read_notification(&mut self) -> Result<serde_json::Value> {
         let mut buf = String::new();
         let n = self.reader.read_line(&mut buf).await?;

@@ -34,7 +34,11 @@ impl GmailProvider {
     }
 
     pub fn with_base(client: AuthClient, base: String, user_email: String) -> Self {
-        Self { client, base, user_email }
+        Self {
+            client,
+            base,
+            user_email,
+        }
     }
 }
 

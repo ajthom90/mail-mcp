@@ -14,23 +14,57 @@ mod tests {
     struct Stub;
     #[async_trait]
     impl MailProvider for Stub {
-        async fn search(&self, _q: &SearchQuery) -> Result<SearchResults> { unimplemented!() }
-        async fn get_thread(&self, _id: &ThreadId) -> Result<Thread> { unimplemented!() }
-        async fn get_message(&self, _id: &MessageId) -> Result<Message> { unimplemented!() }
-        async fn list_folders(&self) -> Result<Vec<Folder>> { unimplemented!() }
-        async fn list_labels(&self) -> Result<Vec<Label>> { unimplemented!() }
-        async fn list_drafts(&self) -> Result<Vec<DraftSummary>> { unimplemented!() }
-        async fn mark_read(&self, _ids: &[MessageId], _read: bool) -> Result<()> { unimplemented!() }
-        async fn star(&self, _ids: &[MessageId], _starred: bool) -> Result<()> { unimplemented!() }
-        async fn label(&self, _ids: &[MessageId], _label: &LabelId, _on: bool) -> Result<()> { unimplemented!() }
-        async fn move_to(&self, _ids: &[MessageId], _folder: &FolderId) -> Result<()> { unimplemented!() }
-        async fn archive(&self, _ids: &[MessageId]) -> Result<()> { unimplemented!() }
-        async fn trash(&self, _ids: &[MessageId]) -> Result<()> { unimplemented!() }
-        async fn untrash(&self, _ids: &[MessageId]) -> Result<()> { unimplemented!() }
-        async fn create_draft(&self, _d: &DraftInput) -> Result<DraftId> { unimplemented!() }
-        async fn update_draft(&self, _id: &DraftId, _d: &DraftInput) -> Result<()> { unimplemented!() }
-        async fn send_message(&self, _m: &OutgoingMessage) -> Result<MessageId> { unimplemented!() }
-        async fn send_draft(&self, _id: &DraftId) -> Result<MessageId> { unimplemented!() }
+        async fn search(&self, _q: &SearchQuery) -> Result<SearchResults> {
+            unimplemented!()
+        }
+        async fn get_thread(&self, _id: &ThreadId) -> Result<Thread> {
+            unimplemented!()
+        }
+        async fn get_message(&self, _id: &MessageId) -> Result<Message> {
+            unimplemented!()
+        }
+        async fn list_folders(&self) -> Result<Vec<Folder>> {
+            unimplemented!()
+        }
+        async fn list_labels(&self) -> Result<Vec<Label>> {
+            unimplemented!()
+        }
+        async fn list_drafts(&self) -> Result<Vec<DraftSummary>> {
+            unimplemented!()
+        }
+        async fn mark_read(&self, _ids: &[MessageId], _read: bool) -> Result<()> {
+            unimplemented!()
+        }
+        async fn star(&self, _ids: &[MessageId], _starred: bool) -> Result<()> {
+            unimplemented!()
+        }
+        async fn label(&self, _ids: &[MessageId], _label: &LabelId, _on: bool) -> Result<()> {
+            unimplemented!()
+        }
+        async fn move_to(&self, _ids: &[MessageId], _folder: &FolderId) -> Result<()> {
+            unimplemented!()
+        }
+        async fn archive(&self, _ids: &[MessageId]) -> Result<()> {
+            unimplemented!()
+        }
+        async fn trash(&self, _ids: &[MessageId]) -> Result<()> {
+            unimplemented!()
+        }
+        async fn untrash(&self, _ids: &[MessageId]) -> Result<()> {
+            unimplemented!()
+        }
+        async fn create_draft(&self, _d: &DraftInput) -> Result<DraftId> {
+            unimplemented!()
+        }
+        async fn update_draft(&self, _id: &DraftId, _d: &DraftInput) -> Result<()> {
+            unimplemented!()
+        }
+        async fn send_message(&self, _m: &OutgoingMessage) -> Result<MessageId> {
+            unimplemented!()
+        }
+        async fn send_draft(&self, _id: &DraftId) -> Result<MessageId> {
+            unimplemented!()
+        }
     }
 
     #[test]

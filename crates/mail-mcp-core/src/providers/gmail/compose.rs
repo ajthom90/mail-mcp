@@ -1,13 +1,14 @@
+use super::client::AuthClient;
 use crate::error::{Error, Result};
-use crate::providers::types::{DraftInput, DraftSummary, EmailAddress, OutgoingMessage};
+use crate::providers::types::{DraftInput, DraftSummary, OutgoingMessage};
 use crate::types::{DraftId, MessageId, ThreadId};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
-use super::client::AuthClient;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers::types::EmailAddress;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -31,7 +32,10 @@ mod tests {
 
     fn input() -> DraftInput {
         DraftInput {
-            to: vec![EmailAddress { email: "alice@example.com".into(), name: None }],
+            to: vec![EmailAddress {
+                email: "alice@example.com".into(),
+                name: None,
+            }],
             cc: vec![],
             bcc: vec![],
             subject: "Hello".into(),
@@ -60,10 +64,13 @@ mod tests {
                 "id": "d1",
                 "message": {"id": "m1", "threadId": "t1"}
             })))
-            .mount(&server).await;
+            .mount(&server)
+            .await;
         let c = auth(&server);
         let base = format!("{}/gmail/v1", server.uri());
-        let id = create_draft_impl(&c, &base, &input(), Some("me@example.com")).await.unwrap();
+        let id = create_draft_impl(&c, &base, &input(), Some("me@example.com"))
+            .await
+            .unwrap();
         assert_eq!(id.as_str(), "d1");
     }
 
@@ -75,17 +82,26 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "id": "m1", "threadId": "t1"
             })))
-            .mount(&server).await;
+            .mount(&server)
+            .await;
         let c = auth(&server);
         let base = format!("{}/gmail/v1", server.uri());
         let m = OutgoingMessage {
-            to: vec![EmailAddress { email: "alice@example.com".into(), name: None }],
-            cc: vec![], bcc: vec![],
+            to: vec![EmailAddress {
+                email: "alice@example.com".into(),
+                name: None,
+            }],
+            cc: vec![],
+            bcc: vec![],
             subject: "Hi".into(),
-            body_text: Some("body".into()), body_html: None,
-            in_reply_to: None, thread_id: None,
+            body_text: Some("body".into()),
+            body_html: None,
+            in_reply_to: None,
+            thread_id: None,
         };
-        let id = send_message_impl(&c, &base, &m, Some("me@example.com")).await.unwrap();
+        let id = send_message_impl(&c, &base, &m, Some("me@example.com"))
+            .await
+            .unwrap();
         assert_eq!(id.as_str(), "m1");
     }
 }
@@ -143,7 +159,13 @@ pub fn build_mime(input: &DraftInput, from: Option<&str>) -> Result<Vec<u8>> {
         builder = builder.cc(input.cc.iter().map(|a| a.email.clone()).collect::<Vec<_>>());
     }
     if !input.bcc.is_empty() {
-        builder = builder.bcc(input.bcc.iter().map(|a| a.email.clone()).collect::<Vec<_>>());
+        builder = builder.bcc(
+            input
+                .bcc
+                .iter()
+                .map(|a| a.email.clone())
+                .collect::<Vec<_>>(),
+        );
     }
     builder = builder.subject(input.subject.clone());
     if let Some(t) = &input.body_text {
@@ -180,7 +202,12 @@ pub async fn create_draft_impl(
         },
     };
     let url = format!("{base}/users/me/drafts");
-    let resp: DraftCreateResp = client.post_json(&url, &payload).await?.error_for_status()?.json().await?;
+    let resp: DraftCreateResp = client
+        .post_json(&url, &payload)
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
     Ok(DraftId::from(resp.id))
 }
 
@@ -251,7 +278,13 @@ pub async fn send_message_impl(
     let mime = build_mime(&input, from)?;
     let raw = b64url(&mime);
     let url = format!("{base}/users/me/messages/send");
-    let payload = serde_json::json!({"raw": raw, "threadId": m.thread_id.as_ref().map(|t| t.as_str())});
-    let resp: SendResp = client.post_json(&url, &payload).await?.error_for_status()?.json().await?;
+    let payload =
+        serde_json::json!({"raw": raw, "threadId": m.thread_id.as_ref().map(|t| t.as_str())});
+    let resp: SendResp = client
+        .post_json(&url, &payload)
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
     Ok(MessageId::from(resp.id))
 }

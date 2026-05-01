@@ -100,11 +100,15 @@ async fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&v)?);
         }
         Cmd::Pause => {
-            client.call("mcp.pause", serde_json::json!({"paused": true})).await?;
+            client
+                .call("mcp.pause", serde_json::json!({"paused": true}))
+                .await?;
             println!("MCP paused");
         }
         Cmd::Resume => {
-            client.call("mcp.pause", serde_json::json!({"paused": false})).await?;
+            client
+                .call("mcp.pause", serde_json::json!({"paused": false}))
+                .await?;
             println!("MCP resumed");
         }
         Cmd::Accounts(AccountsCmd::List) => {
@@ -112,38 +116,72 @@ async fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&v)?);
         }
         Cmd::Accounts(AccountsCmd::AddGmail { label }) => {
-            let v = client.call("accounts.add_oauth", serde_json::json!({"provider": "gmail"})).await?;
+            let v = client
+                .call(
+                    "accounts.add_oauth",
+                    serde_json::json!({"provider": "gmail"}),
+                )
+                .await?;
             let challenge_id = v["challenge_id"].as_str().unwrap_or("").to_string();
             let auth_url = v["auth_url"].as_str().unwrap_or("").to_string();
             println!("Opening browser:\n  {auth_url}\nWaiting for sign-in to complete...");
             // Best-effort browser launch.
             #[cfg(target_os = "macos")]
-            { let _ = std::process::Command::new("open").arg(&auth_url).status(); }
+            {
+                let _ = std::process::Command::new("open").arg(&auth_url).status();
+            }
             #[cfg(target_os = "linux")]
-            { let _ = std::process::Command::new("xdg-open").arg(&auth_url).status(); }
+            {
+                let _ = std::process::Command::new("xdg-open")
+                    .arg(&auth_url)
+                    .status();
+            }
             #[cfg(target_os = "windows")]
-            { let _ = std::process::Command::new("rundll32").args(["url.dll,FileProtocolHandler", &auth_url]).status(); }
+            {
+                let _ = std::process::Command::new("rundll32")
+                    .args(["url.dll,FileProtocolHandler", &auth_url])
+                    .status();
+            }
 
             let v = client
-                .call("accounts.complete_oauth", serde_json::json!({
-                    "challenge_id": challenge_id,
-                    "label": label.unwrap_or_default(),
-                }))
+                .call(
+                    "accounts.complete_oauth",
+                    serde_json::json!({
+                        "challenge_id": challenge_id,
+                        "label": label.unwrap_or_default(),
+                    }),
+                )
                 .await?;
             println!("Account added:\n{}", serde_json::to_string_pretty(&v)?);
         }
         Cmd::Accounts(AccountsCmd::Remove { id }) => {
-            client.call("accounts.remove", serde_json::json!({"account_id": id})).await?;
+            client
+                .call("accounts.remove", serde_json::json!({"account_id": id}))
+                .await?;
             println!("removed");
         }
         Cmd::Permissions(PermissionsCmd::Get { account_id }) => {
-            let v = client.call("permissions.get", serde_json::json!({"account_id": account_id})).await?;
+            let v = client
+                .call(
+                    "permissions.get",
+                    serde_json::json!({"account_id": account_id}),
+                )
+                .await?;
             println!("{}", serde_json::to_string_pretty(&v)?);
         }
-        Cmd::Permissions(PermissionsCmd::Set { account_id, category, policy }) => {
-            client.call("permissions.set", serde_json::json!({
-                "account_id": account_id, "category": category, "policy": policy
-            })).await?;
+        Cmd::Permissions(PermissionsCmd::Set {
+            account_id,
+            category,
+            policy,
+        }) => {
+            client
+                .call(
+                    "permissions.set",
+                    serde_json::json!({
+                        "account_id": account_id, "category": category, "policy": policy
+                    }),
+                )
+                .await?;
             println!("set");
         }
         Cmd::Approvals(ApprovalsCmd::List) => {
@@ -151,11 +189,21 @@ async fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&v)?);
         }
         Cmd::Approvals(ApprovalsCmd::Approve { id }) => {
-            client.call("approvals.decide", serde_json::json!({"id": id, "decision": "approve"})).await?;
+            client
+                .call(
+                    "approvals.decide",
+                    serde_json::json!({"id": id, "decision": "approve"}),
+                )
+                .await?;
             println!("approved");
         }
         Cmd::Approvals(ApprovalsCmd::Reject { id }) => {
-            client.call("approvals.decide", serde_json::json!({"id": id, "decision": "reject"})).await?;
+            client
+                .call(
+                    "approvals.decide",
+                    serde_json::json!({"id": id, "decision": "reject"}),
+                )
+                .await?;
             println!("rejected");
         }
     }

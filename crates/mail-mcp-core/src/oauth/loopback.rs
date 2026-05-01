@@ -16,13 +16,18 @@ mod tests {
         // Simulate the browser redirect.
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(20)).await;
-            let mut sock = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}")).await.unwrap();
+            let mut sock = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}"))
+                .await
+                .unwrap();
             sock.write_all(b"GET /callback?code=abc123&state=expected-state HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
             // Read at least the response header so the server fully writes.
             let mut buf = [0u8; 1024];
             let _ = tokio::time::timeout(Duration::from_secs(1), sock.read(&mut buf)).await;
         });
-        let captured = listener.await_callback(Duration::from_secs(2)).await.unwrap();
+        let captured = listener
+            .await_callback(Duration::from_secs(2))
+            .await
+            .unwrap();
         assert_eq!(captured.code, "abc123");
     }
 
@@ -32,8 +37,12 @@ mod tests {
         let port = listener.port();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(20)).await;
-            let mut sock = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}")).await.unwrap();
-            let _ = sock.write_all(b"GET /callback?code=abc&state=BAD HTTP/1.1\r\nHost: localhost\r\n\r\n").await;
+            let mut sock = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}"))
+                .await
+                .unwrap();
+            let _ = sock
+                .write_all(b"GET /callback?code=abc&state=BAD HTTP/1.1\r\nHost: localhost\r\n\r\n")
+                .await;
             let mut buf = [0u8; 1024];
             let _ = tokio::time::timeout(Duration::from_secs(1), sock.read(&mut buf)).await;
         });
@@ -66,7 +75,10 @@ impl LoopbackListener {
     /// Bind a fresh ephemeral port on 127.0.0.1.
     pub async fn bind(expected_state: impl Into<String>) -> Result<Self> {
         let listener = TcpListener::bind("127.0.0.1:0").await?;
-        Ok(Self { listener, expected_state: expected_state.into() })
+        Ok(Self {
+            listener,
+            expected_state: expected_state.into(),
+        })
     }
 
     pub fn port(&self) -> u16 {
@@ -79,8 +91,12 @@ impl LoopbackListener {
 
     /// Await the next inbound connection, parse it, return the code or an OAuth error.
     pub async fn await_callback(self, timeout: Duration) -> Result<CapturedCallback> {
-        let LoopbackListener { listener, expected_state } = self;
-        let (sock, _) = tokio::time::timeout(timeout, listener.accept()).await
+        let LoopbackListener {
+            listener,
+            expected_state,
+        } = self;
+        let (sock, _) = tokio::time::timeout(timeout, listener.accept())
+            .await
             .map_err(|_| Error::OAuth("timed out waiting for browser callback".into()))?
             .map_err(|e| Error::OAuth(format!("accept failed: {e}")))?;
         handle_one(sock, &expected_state).await
@@ -102,7 +118,9 @@ async fn handle_one(mut sock: TcpStream, expected_state: &str) -> Result<Capture
     let mut error: Option<String> = None;
     for pair in qs.split('&') {
         let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
-        let v = percent_encoding::percent_decode_str(v).decode_utf8_lossy().into_owned();
+        let v = percent_encoding::percent_decode_str(v)
+            .decode_utf8_lossy()
+            .into_owned();
         match k {
             "code" => code = Some(v),
             "state" => state = Some(v),
@@ -112,13 +130,25 @@ async fn handle_one(mut sock: TcpStream, expected_state: &str) -> Result<Capture
     }
 
     let (status, body) = if let Some(e) = error {
-        ("400 Bad Request", format!("OAuth error: {e}\nYou can close this window."))
+        (
+            "400 Bad Request",
+            format!("OAuth error: {e}\nYou can close this window."),
+        )
     } else if state.as_deref() != Some(expected_state) {
-        ("400 Bad Request", "OAuth state mismatch. You can close this window.".into())
+        (
+            "400 Bad Request",
+            "OAuth state mismatch. You can close this window.".into(),
+        )
     } else if code.is_some() {
-        ("200 OK", "Sign-in complete. You can close this window.".into())
+        (
+            "200 OK",
+            "Sign-in complete. You can close this window.".into(),
+        )
     } else {
-        ("400 Bad Request", "Missing code parameter. You can close this window.".into())
+        (
+            "400 Bad Request",
+            "Missing code parameter. You can close this window.".into(),
+        )
     };
 
     let resp = format!(

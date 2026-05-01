@@ -1,6 +1,6 @@
+use super::client::AuthClient;
 use crate::error::Result;
 use crate::types::MessageId;
-use super::client::AuthClient;
 
 #[cfg(test)]
 mod tests {
@@ -32,10 +32,13 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/gmail/v1/users/me/messages/m1/trash"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
-            .mount(&server).await;
+            .mount(&server)
+            .await;
         let c = auth(&server);
         let base = format!("{}/gmail/v1", server.uri());
-        trash_impl(&c, &base, &[MessageId::from("m1")]).await.unwrap();
+        trash_impl(&c, &base, &[MessageId::from("m1")])
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -44,17 +47,23 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/gmail/v1/users/me/messages/m1/untrash"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
-            .mount(&server).await;
+            .mount(&server)
+            .await;
         let c = auth(&server);
         let base = format!("{}/gmail/v1", server.uri());
-        untrash_impl(&c, &base, &[MessageId::from("m1")]).await.unwrap();
+        untrash_impl(&c, &base, &[MessageId::from("m1")])
+            .await
+            .unwrap();
     }
 }
 
 pub async fn trash_impl(client: &AuthClient, base: &str, ids: &[MessageId]) -> Result<()> {
     for id in ids {
         let url = format!("{base}/users/me/messages/{}/trash", id.as_str());
-        client.post_json(&url, &serde_json::json!({})).await?.error_for_status()?;
+        client
+            .post_json(&url, &serde_json::json!({}))
+            .await?
+            .error_for_status()?;
     }
     Ok(())
 }
@@ -62,7 +71,10 @@ pub async fn trash_impl(client: &AuthClient, base: &str, ids: &[MessageId]) -> R
 pub async fn untrash_impl(client: &AuthClient, base: &str, ids: &[MessageId]) -> Result<()> {
     for id in ids {
         let url = format!("{base}/users/me/messages/{}/untrash", id.as_str());
-        client.post_json(&url, &serde_json::json!({})).await?.error_for_status()?;
+        client
+            .post_json(&url, &serde_json::json!({}))
+            .await?
+            .error_for_status()?;
     }
     Ok(())
 }

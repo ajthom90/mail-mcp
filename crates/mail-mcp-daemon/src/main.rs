@@ -48,7 +48,10 @@ async fn main() -> Result<()> {
     paths.ensure_dirs()?;
 
     let _guard = mail_mcp_core::logging::init_tracing(paths.logs_dir(), false)?;
-    tracing::info!(version = env!("CARGO_PKG_VERSION"), "starting mail-mcp-daemon");
+    tracing::info!(
+        version = env!("CARGO_PKG_VERSION"),
+        "starting mail-mcp-daemon"
+    );
 
     let _pid = lifecycle::PidLock::acquire(&paths.pid_file())?;
 
@@ -90,7 +93,9 @@ async fn main() -> Result<()> {
     };
     let addr = listener.local_addr()?;
     let app = mcp_server.router();
-    let http_handle = tokio::spawn(async move { let _ = axum::serve(listener, app).await; });
+    let http_handle = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
 
     let endpoint = McpEndpointInfo {
         url: lifecycle::endpoint_url(addr),
@@ -106,15 +111,19 @@ async fn main() -> Result<()> {
     let notif_for_approvals = notif_tx.clone();
     tokio::spawn(async move {
         while let Ok(evt) = approval_events.recv().await {
-            use mail_mcp_core::permissions::approvals::ApprovalEvent;
             use mail_mcp_core::ipc::messages::Notification;
+            use mail_mcp_core::permissions::approvals::ApprovalEvent;
             let n = match evt {
                 ApprovalEvent::Requested(p) => Notification::ApprovalRequested(p),
                 ApprovalEvent::Resolved { id, decision } => Notification::ApprovalResolved {
                     id: id.to_string(),
                     decision: match decision {
-                        mail_mcp_core::permissions::approvals::ApprovalDecision::Approve => "approve".into(),
-                        mail_mcp_core::permissions::approvals::ApprovalDecision::Reject => "reject".into(),
+                        mail_mcp_core::permissions::approvals::ApprovalDecision::Approve => {
+                            "approve".into()
+                        }
+                        mail_mcp_core::permissions::approvals::ApprovalDecision::Reject => {
+                            "reject".into()
+                        }
                     },
                 },
             };

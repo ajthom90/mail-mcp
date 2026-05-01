@@ -6,45 +6,6 @@ use std::io::Write;
 use std::net::SocketAddr;
 use std::path::Path;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use mail_mcp_core::paths::Paths;
-
-    #[test]
-    fn pid_lock_prevents_second_holder() {
-        let tmp = tempfile::tempdir().unwrap();
-        let p = Paths::with_root(tmp.path().to_path_buf());
-        p.ensure_dirs().unwrap();
-        let _first = PidLock::acquire(&p.pid_file()).unwrap();
-        let second = PidLock::acquire(&p.pid_file());
-        assert!(second.is_err());
-    }
-
-    #[test]
-    fn endpoint_round_trip() {
-        let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join("ep.json");
-        let info = McpEndpointInfo {
-            url: "http://127.0.0.1:65000/mcp".into(),
-            bearer_token: "abc".into(),
-            stdio_shim_path: Some("/usr/local/bin/mail-mcp-stdio".into()),
-        };
-        write_endpoint(&path, &info).unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            assert_eq!(
-                std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
-                0o600
-            );
-        }
-        let loaded: McpEndpointInfo = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-        assert_eq!(loaded.url, info.url);
-        assert_eq!(loaded.bearer_token, info.bearer_token);
-    }
-}
-
 pub struct PidLock {
     file: File,
     path: std::path::PathBuf,
@@ -66,8 +27,11 @@ impl PidLock {
             .with_context(|| format!("locking pid file {}", path.display()))?;
         let mut f = &file;
         f.set_len(0).ok();
-        write!(f, "{}\n", std::process::id())?;
-        Ok(Self { file, path: path.to_path_buf() })
+        writeln!(f, "{}", std::process::id())?;
+        Ok(Self {
+            file,
+            path: path.to_path_buf(),
+        })
     }
 }
 
@@ -105,4 +69,44 @@ pub fn fresh_bearer_token() -> String {
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use base64::Engine;
     URL_SAFE_NO_PAD.encode(buf)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mail_mcp_core::paths::Paths;
+
+    #[test]
+    fn pid_lock_prevents_second_holder() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = Paths::with_root(tmp.path().to_path_buf());
+        p.ensure_dirs().unwrap();
+        let _first = PidLock::acquire(&p.pid_file()).unwrap();
+        let second = PidLock::acquire(&p.pid_file());
+        assert!(second.is_err());
+    }
+
+    #[test]
+    fn endpoint_round_trip() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("ep.json");
+        let info = McpEndpointInfo {
+            url: "http://127.0.0.1:65000/mcp".into(),
+            bearer_token: "abc".into(),
+            stdio_shim_path: Some("/usr/local/bin/mail-mcp-stdio".into()),
+        };
+        write_endpoint(&path, &info).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        let loaded: McpEndpointInfo =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(loaded.url, info.url);
+        assert_eq!(loaded.bearer_token, info.bearer_token);
+    }
 }

@@ -19,7 +19,11 @@ mod tests {
     struct Echo;
     #[async_trait]
     impl Handler for Echo {
-        async fn handle(&self, method: &str, params: serde_json::Value) -> Result<serde_json::Value> {
+        async fn handle(
+            &self,
+            method: &str,
+            params: serde_json::Value,
+        ) -> Result<serde_json::Value> {
             match method {
                 "echo" => Ok(params),
                 "boom" => Err(Error::Internal("nope".into())),
@@ -29,7 +33,7 @@ mod tests {
     }
 
     fn sock_path() -> PathBuf {
-        let dir = tempfile::tempdir().unwrap().into_path();
+        let dir = tempfile::tempdir().unwrap().keep();
         dir.join("ipc.sock")
     }
 
@@ -42,7 +46,11 @@ mod tests {
         let _h = tokio::spawn(async move { server.bind_and_serve(&p).await.unwrap() });
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         let mut sock = UnixStream::connect(&path).await.unwrap();
-        sock.write_all(b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"echo\",\"params\":{\"a\":1}}\n").await.unwrap();
+        sock.write_all(
+            b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"echo\",\"params\":{\"a\":1}}\n",
+        )
+        .await
+        .unwrap();
         let mut reader = BufReader::new(sock);
         let mut line = String::new();
         reader.read_line(&mut line).await.unwrap();
@@ -60,7 +68,9 @@ mod tests {
         let _h = tokio::spawn(async move { server.bind_and_serve(&p).await.unwrap() });
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         let mut sock = UnixStream::connect(&path).await.unwrap();
-        sock.write_all(b"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"nope\"}\n").await.unwrap();
+        sock.write_all(b"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"nope\"}\n")
+            .await
+            .unwrap();
         let mut reader = BufReader::new(sock);
         let mut line = String::new();
         reader.read_line(&mut line).await.unwrap();
@@ -94,7 +104,13 @@ mod tests {
         let _ = tx2.send(Notification::McpPausedChanged { paused: true });
 
         // Next line: the broadcast notification.
-        tokio::time::timeout(std::time::Duration::from_secs(1), reader.read_line(&mut line)).await.unwrap().unwrap();
+        tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            reader.read_line(&mut line),
+        )
+        .await
+        .unwrap()
+        .unwrap();
         let v: serde_json::Value = serde_json::from_str(&line).unwrap();
         assert_eq!(v["method"], "mcp.paused_changed");
     }
@@ -114,7 +130,10 @@ pub struct Server {
 
 impl Server {
     pub fn new(handler: Arc<dyn Handler>, notifications: broadcast::Sender<Notification>) -> Self {
-        Self { handler, notifications }
+        Self {
+            handler,
+            notifications,
+        }
     }
 
     /// Bind the UDS at `path` (unlinking any stale file) and serve forever.
@@ -173,7 +192,11 @@ async fn serve_conn(
                 Notification::AccountNeedsReauth { .. } => "account.needs_reauth",
                 Notification::McpPausedChanged { .. } => "mcp.paused_changed",
             };
-            let allowed = subscribed_for_notif.read().await.iter().any(|m| m == method);
+            let allowed = subscribed_for_notif
+                .read()
+                .await
+                .iter()
+                .any(|m| m == method);
             if !allowed {
                 continue;
             }
@@ -184,8 +207,12 @@ async fn serve_conn(
             })
             .unwrap();
             let mut w = writer_for_notif.lock().await;
-            if w.write_all(frame.as_bytes()).await.is_err() { break; }
-            if w.write_all(b"\n").await.is_err() { break; }
+            if w.write_all(frame.as_bytes()).await.is_err() {
+                break;
+            }
+            if w.write_all(b"\n").await.is_err() {
+                break;
+            }
         }
     });
 
@@ -203,10 +230,15 @@ async fn serve_conn(
                     jsonrpc: "2.0",
                     id: serde_json::Value::Null,
                     result: None,
-                    error: Some(JsonRpcError { code: -32700, message: format!("parse: {e}") }),
+                    error: Some(JsonRpcError {
+                        code: -32700,
+                        message: format!("parse: {e}"),
+                    }),
                 };
                 let mut w = writer.lock().await;
-                let _ = w.write_all(serde_json::to_string(&resp).unwrap().as_bytes()).await;
+                let _ = w
+                    .write_all(serde_json::to_string(&resp).unwrap().as_bytes())
+                    .await;
                 let _ = w.write_all(b"\n").await;
                 continue;
             }
@@ -222,7 +254,9 @@ async fn serve_conn(
             *subscribed.write().await = events.clone();
             Ok(serde_json::json!({"subscribed": events}))
         } else {
-            handler.handle(&req.method, req.params.unwrap_or(serde_json::Value::Null)).await
+            handler
+                .handle(&req.method, req.params.unwrap_or(serde_json::Value::Null))
+                .await
         };
         let resp = match result {
             Ok(v) => JsonRpcResponse {
@@ -242,7 +276,8 @@ async fn serve_conn(
             },
         };
         let mut w = writer.lock().await;
-        w.write_all(serde_json::to_string(&resp).unwrap().as_bytes()).await?;
+        w.write_all(serde_json::to_string(&resp).unwrap().as_bytes())
+            .await?;
         w.write_all(b"\n").await?;
     }
 }

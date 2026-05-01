@@ -1,8 +1,8 @@
+use super::client::AuthClient;
 use crate::error::Result;
 use crate::providers::types::{Folder, Label};
 use crate::types::{FolderId, LabelId};
 use serde::Deserialize;
-use super::client::AuthClient;
 
 #[cfg(test)]
 mod tests {
@@ -40,9 +40,12 @@ mod tests {
                     {"id":"Label_1","name":"Followups","type":"user"},
                 ]
             })))
-            .mount(&server).await;
+            .mount(&server)
+            .await;
         let c = auth_client(&server);
-        let labels = list_labels_impl(&c, &format!("{}/gmail/v1", server.uri())).await.unwrap();
+        let labels = list_labels_impl(&c, &format!("{}/gmail/v1", server.uri()))
+            .await
+            .unwrap();
         assert_eq!(labels.len(), 1);
         assert_eq!(labels[0].name, "Followups");
     }
@@ -59,9 +62,12 @@ mod tests {
                     {"id":"Label_1","name":"Other","type":"user"},
                 ]
             })))
-            .mount(&server).await;
+            .mount(&server)
+            .await;
         let c = auth_client(&server);
-        let folders = list_folders_impl(&c, &format!("{}/gmail/v1", server.uri())).await.unwrap();
+        let folders = list_folders_impl(&c, &format!("{}/gmail/v1", server.uri()))
+            .await
+            .unwrap();
         let names: Vec<_> = folders.iter().map(|f| f.name.as_str()).collect();
         assert!(names.contains(&"INBOX"));
         assert!(names.contains(&"TRASH"));
@@ -84,20 +90,40 @@ struct RawLabel {
 
 pub async fn list_labels_impl(client: &AuthClient, base: &str) -> Result<Vec<Label>> {
     let url = format!("{base}/users/me/labels");
-    let resp = client.get(&url).await?.error_for_status()?.json::<LabelsResponse>().await?;
-    Ok(resp.labels.into_iter().filter(|l| l.kind == "user").map(|l| Label {
-        id: LabelId::from(l.id),
-        name: l.name,
-        system: false,
-    }).collect())
+    let resp = client
+        .get(&url)
+        .await?
+        .error_for_status()?
+        .json::<LabelsResponse>()
+        .await?;
+    Ok(resp
+        .labels
+        .into_iter()
+        .filter(|l| l.kind == "user")
+        .map(|l| Label {
+            id: LabelId::from(l.id),
+            name: l.name,
+            system: false,
+        })
+        .collect())
 }
 
 pub async fn list_folders_impl(client: &AuthClient, base: &str) -> Result<Vec<Folder>> {
     let url = format!("{base}/users/me/labels");
-    let resp = client.get(&url).await?.error_for_status()?.json::<LabelsResponse>().await?;
-    Ok(resp.labels.into_iter().filter(|l| l.kind == "system").map(|l| Folder {
-        id: FolderId::from(l.id),
-        name: l.name,
-        system: true,
-    }).collect())
+    let resp = client
+        .get(&url)
+        .await?
+        .error_for_status()?
+        .json::<LabelsResponse>()
+        .await?;
+    Ok(resp
+        .labels
+        .into_iter()
+        .filter(|l| l.kind == "system")
+        .map(|l| Folder {
+            id: FolderId::from(l.id),
+            name: l.name,
+            system: true,
+        })
+        .collect())
 }

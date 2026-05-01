@@ -16,7 +16,8 @@ mod tests {
 
     #[test]
     fn put_and_get_returns_value() {
-        let cache: MessageCache<Stub> = MessageCache::new(NonZeroUsize::new(4).unwrap(), Duration::from_secs(60));
+        let cache: MessageCache<Stub> =
+            MessageCache::new(NonZeroUsize::new(4).unwrap(), Duration::from_secs(60));
         let key = id("a");
         cache.put(key.0, key.1.clone(), Stub("v".into()));
         assert_eq!(cache.get(key.0, &key.1), Some(Stub("v".into())));
@@ -24,14 +25,16 @@ mod tests {
 
     #[test]
     fn miss_returns_none() {
-        let cache: MessageCache<Stub> = MessageCache::new(NonZeroUsize::new(4).unwrap(), Duration::from_secs(60));
+        let cache: MessageCache<Stub> =
+            MessageCache::new(NonZeroUsize::new(4).unwrap(), Duration::from_secs(60));
         let (a, m) = id("z");
         assert_eq!(cache.get(a, &m), None);
     }
 
     #[test]
     fn lru_eviction() {
-        let cache: MessageCache<Stub> = MessageCache::new(NonZeroUsize::new(2).unwrap(), Duration::from_secs(60));
+        let cache: MessageCache<Stub> =
+            MessageCache::new(NonZeroUsize::new(2).unwrap(), Duration::from_secs(60));
         let a = AccountId::new();
         cache.put(a, MessageId::from("1"), Stub("x".into()));
         cache.put(a, MessageId::from("2"), Stub("x".into()));
@@ -43,7 +46,8 @@ mod tests {
 
     #[test]
     fn ttl_expiry() {
-        let cache: MessageCache<Stub> = MessageCache::new(NonZeroUsize::new(4).unwrap(), Duration::from_millis(50));
+        let cache: MessageCache<Stub> =
+            MessageCache::new(NonZeroUsize::new(4).unwrap(), Duration::from_millis(50));
         let (a, m) = id("a");
         cache.put(a, m.clone(), Stub("v".into()));
         std::thread::sleep(Duration::from_millis(80));
@@ -52,7 +56,8 @@ mod tests {
 
     #[test]
     fn invalidate_account_clears_only_that_account() {
-        let cache: MessageCache<Stub> = MessageCache::new(NonZeroUsize::new(8).unwrap(), Duration::from_secs(60));
+        let cache: MessageCache<Stub> =
+            MessageCache::new(NonZeroUsize::new(8).unwrap(), Duration::from_secs(60));
         let a = AccountId::new();
         let b = AccountId::new();
         cache.put(a, MessageId::from("1"), Stub("a1".into()));
@@ -86,7 +91,10 @@ impl<V: Clone + Send + 'static> MessageCache<V> {
         let mut g = self.inner.lock().unwrap();
         g.put(
             (account, msg),
-            CacheEntry { value, inserted: Instant::now() },
+            CacheEntry {
+                value,
+                inserted: Instant::now(),
+            },
         );
     }
 
@@ -104,9 +112,16 @@ impl<V: Clone + Send + 'static> MessageCache<V> {
 
     pub fn invalidate_account(&self, account: AccountId) {
         let mut g = self.inner.lock().unwrap();
-        let to_remove: Vec<_> = g.iter().filter_map(|(k, _)| {
-            if k.0 == account { Some(k.clone()) } else { None }
-        }).collect();
+        let to_remove: Vec<_> = g
+            .iter()
+            .filter_map(|(k, _)| {
+                if k.0 == account {
+                    Some(k.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
         for k in to_remove {
             g.pop(&k);
         }

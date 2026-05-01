@@ -11,7 +11,10 @@ mod tests {
 
     #[test]
     fn tools_include_send_message_in_send_category() {
-        let t = tools().into_iter().find(|t| t.name == "send_message").unwrap();
+        let t = tools()
+            .into_iter()
+            .find(|t| t.name == "send_message")
+            .unwrap();
         assert_eq!(t.category, Category::Send);
     }
 
@@ -24,7 +27,11 @@ mod tests {
     #[test]
     fn every_tool_has_a_schema_object() {
         for t in tools() {
-            assert!(t.input_schema.is_object(), "tool {} schema is not an object", t.name);
+            assert!(
+                t.input_schema.is_object(),
+                "tool {} schema is not an object",
+                t.name
+            );
         }
     }
 }

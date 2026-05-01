@@ -33,7 +33,9 @@ mod tests {
         let queue = ApprovalQueue::new(Duration::from_secs(5));
         let trust = SessionTrust::new();
         let p = perms_for(&[(Category::Send, Policy::Allow)]);
-        let outcome = enforce(&p, &queue, &trust, Category::Send, req()).await.unwrap();
+        let outcome = enforce(&p, &queue, &trust, Category::Send, req())
+            .await
+            .unwrap();
         assert_eq!(outcome, EnforceOutcome::Proceed);
     }
 
@@ -42,7 +44,9 @@ mod tests {
         let queue = ApprovalQueue::new(Duration::from_secs(5));
         let trust = SessionTrust::new();
         let p = perms_for(&[(Category::Send, Policy::Block)]);
-        let outcome = enforce(&p, &queue, &trust, Category::Send, req()).await.unwrap();
+        let outcome = enforce(&p, &queue, &trust, Category::Send, req())
+            .await
+            .unwrap();
         assert_eq!(outcome, EnforceOutcome::Blocked);
     }
 
@@ -51,7 +55,9 @@ mod tests {
         let queue = ApprovalQueue::new(Duration::from_secs(5));
         let trust = SessionTrust::new();
         let p = perms_for(&[(Category::Send, Policy::Draftify)]);
-        let outcome = enforce(&p, &queue, &trust, Category::Send, req()).await.unwrap();
+        let outcome = enforce(&p, &queue, &trust, Category::Send, req())
+            .await
+            .unwrap();
         assert_eq!(outcome, EnforceOutcome::ConvertToDraft);
     }
 
@@ -64,11 +70,15 @@ mod tests {
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(10)).await;
             let pending = q2.list().await;
-            q2.decide(pending[0].id, ApprovalDecision::Approve).await.unwrap();
+            q2.decide(pending[0].id, ApprovalDecision::Approve)
+                .await
+                .unwrap();
         });
         let mut r = req();
         r.category = Category::Trash;
-        let outcome = enforce(&p, &queue, &trust, Category::Trash, r).await.unwrap();
+        let outcome = enforce(&p, &queue, &trust, Category::Trash, r)
+            .await
+            .unwrap();
         assert_eq!(outcome, EnforceOutcome::Proceed);
     }
 
@@ -81,17 +91,23 @@ mod tests {
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(10)).await;
             let pending = q2.list().await;
-            q2.decide(pending[0].id, ApprovalDecision::Approve).await.unwrap();
+            q2.decide(pending[0].id, ApprovalDecision::Approve)
+                .await
+                .unwrap();
         });
         let r = req();
         let acct = r.account;
-        let first = enforce(&p, &queue, &trust, Category::Send, r.clone()).await.unwrap();
+        let first = enforce(&p, &queue, &trust, Category::Send, r.clone())
+            .await
+            .unwrap();
         assert_eq!(first, EnforceOutcome::Proceed);
         // Second call must NOT enqueue another approval.
         let pre_count = queue.list().await.len();
         let mut r2 = r.clone();
         r2.account = acct;
-        let second = enforce(&p, &queue, &trust, Category::Send, r2).await.unwrap();
+        let second = enforce(&p, &queue, &trust, Category::Send, r2)
+            .await
+            .unwrap();
         assert_eq!(second, EnforceOutcome::Proceed);
         assert_eq!(queue.list().await.len(), pre_count);
     }
@@ -105,9 +121,13 @@ mod tests {
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(10)).await;
             let pending = q2.list().await;
-            q2.decide(pending[0].id, ApprovalDecision::Reject).await.unwrap();
+            q2.decide(pending[0].id, ApprovalDecision::Reject)
+                .await
+                .unwrap();
         });
-        let outcome = enforce(&p, &queue, &trust, Category::Send, req()).await.unwrap();
+        let outcome = enforce(&p, &queue, &trust, Category::Send, req())
+            .await
+            .unwrap();
         assert_eq!(outcome, EnforceOutcome::Blocked);
     }
 }
@@ -135,7 +155,12 @@ impl SessionTrust {
     }
 
     pub fn is_trusted(&self, account: AccountId, cat: Category) -> bool {
-        self.inner.lock().unwrap().get(&(account, cat)).copied().unwrap_or(false)
+        self.inner
+            .lock()
+            .unwrap()
+            .get(&(account, cat))
+            .copied()
+            .unwrap_or(false)
     }
 
     pub fn grant(&self, account: AccountId, cat: Category) {
@@ -182,7 +207,10 @@ pub async fn enforce(
     }
 }
 
-async fn ask_confirm(queue: &ApprovalQueue, request: ApprovalRequest) -> Result<EnforceOutcome, Error> {
+async fn ask_confirm(
+    queue: &ApprovalQueue,
+    request: ApprovalRequest,
+) -> Result<EnforceOutcome, Error> {
     let (_id, fut) = queue.enqueue(request).await;
     use super::approvals::ApprovalOutcome;
     match fut.await? {

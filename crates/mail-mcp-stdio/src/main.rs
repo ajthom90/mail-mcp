@@ -5,7 +5,11 @@ use std::io::{BufRead, Write};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
-#[command(author, version, about = "MCP stdio shim — forwards stdio MCP frames to the local mail-mcp daemon over HTTP.")]
+#[command(
+    author,
+    version,
+    about = "MCP stdio shim — forwards stdio MCP frames to the local mail-mcp daemon over HTTP."
+)]
 struct Args {
     /// Override the path to endpoint.json. Default: platform data dir.
     #[arg(long, env = "MAIL_MCP_ENDPOINT_FILE")]
@@ -56,7 +60,7 @@ fn main() -> Result<()> {
                 "id": null,
                 "error": {"code": -32099, "message": format!("daemon http {}: {}", status, body)}
             });
-            writeln!(stdout, "{}", synth)?;
+            writeln!(stdout, "{synth}")?;
         } else {
             writeln!(stdout, "{}", body.trim_end())?;
         }

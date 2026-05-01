@@ -101,16 +101,27 @@ pub struct RawBody {
 pub fn decode(raw: RawMessage) -> Result<Message, crate::error::Error> {
     use crate::error::Error;
 
-    let payload = raw.payload.ok_or_else(|| Error::Provider("message missing payload".into()))?;
+    let payload = raw
+        .payload
+        .ok_or_else(|| Error::Provider("message missing payload".into()))?;
     let headers: std::collections::HashMap<String, String> = payload
         .headers
         .iter()
         .map(|h| (h.name.to_ascii_lowercase(), h.value.clone()))
         .collect();
     let from = headers.get("from").map(|s| parse_address(s));
-    let to = headers.get("to").map(|s| parse_address_list(s)).unwrap_or_default();
-    let cc = headers.get("cc").map(|s| parse_address_list(s)).unwrap_or_default();
-    let bcc = headers.get("bcc").map(|s| parse_address_list(s)).unwrap_or_default();
+    let to = headers
+        .get("to")
+        .map(|s| parse_address_list(s))
+        .unwrap_or_default();
+    let cc = headers
+        .get("cc")
+        .map(|s| parse_address_list(s))
+        .unwrap_or_default();
+    let bcc = headers
+        .get("bcc")
+        .map(|s| parse_address_list(s))
+        .unwrap_or_default();
     let subject = headers.get("subject").cloned().unwrap_or_default();
     let date = parse_date(headers.get("date").map(String::as_str), &raw.internal_date);
 
@@ -159,9 +170,9 @@ fn walk_parts(
 ) {
     let mime = part.mime_type.to_ascii_lowercase();
     if mime == "text/plain" && body_text.is_none() {
-        *body_text = part.body.as_ref().and_then(|b| decode_body(b));
+        *body_text = part.body.as_ref().and_then(decode_body);
     } else if mime == "text/html" && body_html.is_none() {
-        *body_html = part.body.as_ref().and_then(|b| decode_body(b));
+        *body_html = part.body.as_ref().and_then(decode_body);
     } else if !part.filename.is_empty() {
         if let Some(body) = &part.body {
             attachments.push(AttachmentMeta {
@@ -197,7 +208,10 @@ fn parse_address(raw: &str) -> EmailAddress {
             };
         }
     }
-    EmailAddress { email: raw.trim().to_string(), name: None }
+    EmailAddress {
+        email: raw.trim().to_string(),
+        name: None,
+    }
 }
 
 fn parse_address_list(raw: &str) -> Vec<EmailAddress> {
@@ -221,10 +235,20 @@ fn parse_date(date_header: Option<&str>, internal_ms: &str) -> chrono::DateTime<
 fn is_system_label(id: &str) -> bool {
     matches!(
         id,
-        "INBOX" | "SENT" | "TRASH" | "DRAFT" | "SPAM" | "STARRED" | "UNREAD"
-            | "IMPORTANT" | "CHAT"
-            | "CATEGORY_PERSONAL" | "CATEGORY_SOCIAL" | "CATEGORY_PROMOTIONS"
-            | "CATEGORY_UPDATES" | "CATEGORY_FORUMS"
+        "INBOX"
+            | "SENT"
+            | "TRASH"
+            | "DRAFT"
+            | "SPAM"
+            | "STARRED"
+            | "UNREAD"
+            | "IMPORTANT"
+            | "CHAT"
+            | "CATEGORY_PERSONAL"
+            | "CATEGORY_SOCIAL"
+            | "CATEGORY_PROMOTIONS"
+            | "CATEGORY_UPDATES"
+            | "CATEGORY_FORUMS"
     )
 }
 

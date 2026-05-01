@@ -1,4 +1,5 @@
 //! mail-mcp core library.
+#![allow(clippy::items_after_test_module)]
 
 pub mod accounts;
 pub mod cache;

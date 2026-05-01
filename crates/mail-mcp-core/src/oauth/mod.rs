@@ -29,9 +29,15 @@ mod tests {
         assert_eq!(cfg.auth_url, "https://accounts.google.com/o/oauth2/v2/auth");
         assert_eq!(cfg.token_url, "https://oauth2.googleapis.com/token");
         assert_eq!(cfg.client_id, "test-client-id");
-        assert!(cfg.default_scopes.iter().any(|s| s.contains("gmail.modify")));
+        assert!(cfg
+            .default_scopes
+            .iter()
+            .any(|s| s.contains("gmail.modify")));
         assert!(cfg.default_scopes.iter().any(|s| s.contains("gmail.send")));
-        assert!(cfg.default_scopes.iter().any(|s| s.contains("gmail.compose")));
+        assert!(cfg
+            .default_scopes
+            .iter()
+            .any(|s| s.contains("gmail.compose")));
     }
 
     #[test]
@@ -76,7 +82,10 @@ impl PkcePair {
             .map(char::from)
             .collect();
         let challenge = Self::compute_challenge(&verifier);
-        Self { verifier, challenge }
+        Self {
+            verifier,
+            challenge,
+        }
     }
 
     pub fn compute_challenge(verifier: &str) -> String {
@@ -240,7 +249,14 @@ pub async fn complete_authorization(
     timeout: std::time::Duration,
 ) -> Result<OAuthTokens> {
     let captured = challenge.listener.await_callback(timeout).await?;
-    exchange_code(client, cfg, &challenge.verifier, &captured.code, &challenge.redirect_uri).await
+    exchange_code(
+        client,
+        cfg,
+        &challenge.verifier,
+        &captured.code,
+        &challenge.redirect_uri,
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -277,7 +293,9 @@ mod exchange_tests {
             &pair.verifier,
             "auth-code-1",
             "http://127.0.0.1:1234/callback",
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
         assert_eq!(tokens.access_token, "at-1");
         assert_eq!(tokens.refresh_token.as_deref(), Some("rt-1"));
     }

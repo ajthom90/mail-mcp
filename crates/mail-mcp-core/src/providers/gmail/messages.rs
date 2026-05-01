@@ -1,9 +1,9 @@
+use super::client::AuthClient;
+use super::parse::{decode, RawMessage};
 use crate::error::Result;
 use crate::providers::r#trait::SearchResults;
 use crate::providers::types::{SearchQuery, Thread, ThreadSummary};
 use crate::types::{MessageId, ThreadId};
-use super::client::AuthClient;
-use super::parse::{decode, RawMessage};
 use serde::Deserialize;
 
 #[cfg(test)]
@@ -43,7 +43,8 @@ mod tests {
                 ],
                 "nextPageToken": "NEXT"
             })))
-            .mount(&server).await;
+            .mount(&server)
+            .await;
         // Each thread.get fetch:
         for tid in &["t1", "t2"] {
             Mock::given(method("GET"))
@@ -68,12 +69,17 @@ mod tests {
                         }
                     }]
                 })))
-                .mount(&server).await;
+                .mount(&server)
+                .await;
         }
 
         let c = auth(&server);
         let base = format!("{}/gmail/v1", server.uri());
-        let q = SearchQuery { text: Some("from:alice".into()), limit: Some(10), ..Default::default() };
+        let q = SearchQuery {
+            text: Some("from:alice".into()),
+            limit: Some(10),
+            ..Default::default()
+        };
         let res = search_impl(&c, &base, &q).await.unwrap();
         assert_eq!(res.threads.len(), 2);
         assert_eq!(res.threads[0].subject, "Subject t1");
@@ -141,9 +147,11 @@ pub async fn search_impl(
     let mut summaries = Vec::with_capacity(list.threads.len());
     for stub in list.threads {
         let thread = get_thread_full(client, base, &ThreadId::from(stub.id)).await?;
-        let last = thread.messages.last().cloned().ok_or_else(|| {
-            crate::error::Error::Provider("thread has no messages".into())
-        })?;
+        let last = thread
+            .messages
+            .last()
+            .cloned()
+            .ok_or_else(|| crate::error::Error::Provider("thread has no messages".into()))?;
         summaries.push(ThreadSummary {
             id: thread.id.clone(),
             last_message_id: last.id.clone(),
@@ -182,7 +190,11 @@ pub async fn get_thread_full(client: &AuthClient, base: &str, id: &ThreadId) -> 
     })
 }
 
-pub async fn get_message_impl(client: &AuthClient, base: &str, id: &MessageId) -> Result<crate::providers::types::Message> {
+pub async fn get_message_impl(
+    client: &AuthClient,
+    base: &str,
+    id: &MessageId,
+) -> Result<crate::providers::types::Message> {
     let url = format!("{base}/users/me/messages/{}?format=full", id.as_str());
     let raw: RawMessage = client.get(&url).await?.error_for_status()?.json().await?;
     decode(raw)

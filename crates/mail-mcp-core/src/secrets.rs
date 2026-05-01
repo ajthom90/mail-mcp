@@ -95,7 +95,9 @@ mod tests {
     fn round_trip_secret() {
         let id = AccountId::new();
         let secrets = SecretStore::new();
-        secrets.set(id, KeyKind::RefreshToken, "tok-abc-123").unwrap();
+        secrets
+            .set(id, KeyKind::RefreshToken, "tok-abc-123")
+            .unwrap();
         let got = secrets.get(id, KeyKind::RefreshToken).unwrap();
         assert_eq!(got.as_deref(), Some("tok-abc-123"));
         secrets.delete(id, KeyKind::RefreshToken).unwrap();

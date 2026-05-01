@@ -42,7 +42,12 @@ impl Paths {
                 .unwrap_or_else(|| PathBuf::from("/tmp"));
             let uid = unsafe { libc_geteuid() };
             let runtime = tmpdir.join(format!("mail-mcp-{uid}"));
-            Ok(Self { data, logs, cache, runtime })
+            Ok(Self {
+                data,
+                logs,
+                cache,
+                runtime,
+            })
         }
         #[cfg(target_os = "linux")]
         {
@@ -62,7 +67,12 @@ impl Paths {
                     let uid = unsafe { libc_geteuid() };
                     PathBuf::from(format!("/tmp/mail-mcp-{uid}"))
                 });
-            Ok(Self { data, logs, cache, runtime })
+            Ok(Self {
+                data,
+                logs,
+                cache,
+                runtime,
+            })
         }
         #[cfg(target_os = "windows")]
         {
@@ -88,15 +98,31 @@ impl Paths {
         }
     }
 
-    pub fn data_dir(&self) -> &Path { &self.data }
-    pub fn logs_dir(&self) -> &Path { &self.logs }
-    pub fn cache_dir(&self) -> &Path { &self.cache }
-    pub fn runtime_dir(&self) -> &Path { &self.runtime }
+    pub fn data_dir(&self) -> &Path {
+        &self.data
+    }
+    pub fn logs_dir(&self) -> &Path {
+        &self.logs
+    }
+    pub fn cache_dir(&self) -> &Path {
+        &self.cache
+    }
+    pub fn runtime_dir(&self) -> &Path {
+        &self.runtime
+    }
 
-    pub fn state_db(&self) -> PathBuf { self.data.join("state.db") }
-    pub fn endpoint_json(&self) -> PathBuf { self.data.join("endpoint.json") }
-    pub fn ipc_socket(&self) -> PathBuf { self.runtime.join("ipc.sock") }
-    pub fn pid_file(&self) -> PathBuf { self.runtime.join("daemon.pid") }
+    pub fn state_db(&self) -> PathBuf {
+        self.data.join("state.db")
+    }
+    pub fn endpoint_json(&self) -> PathBuf {
+        self.data.join("endpoint.json")
+    }
+    pub fn ipc_socket(&self) -> PathBuf {
+        self.runtime.join("ipc.sock")
+    }
+    pub fn pid_file(&self) -> PathBuf {
+        self.runtime.join("daemon.pid")
+    }
 
     /// Ensure all directories exist with permissions appropriate to their content.
     pub fn ensure_dirs(&self) -> Result<()> {
@@ -133,7 +159,10 @@ mod tests {
         let p = Paths::with_root(tmp.path().to_path_buf());
         assert_eq!(p.data_dir(), tmp.path().join("data"));
         assert_eq!(p.state_db(), tmp.path().join("data").join("state.db"));
-        assert_eq!(p.endpoint_json(), tmp.path().join("data").join("endpoint.json"));
+        assert_eq!(
+            p.endpoint_json(),
+            tmp.path().join("data").join("endpoint.json")
+        );
         assert_eq!(p.logs_dir(), tmp.path().join("logs"));
         assert_eq!(p.cache_dir(), tmp.path().join("cache"));
         assert_eq!(p.runtime_dir(), tmp.path().join("run"));
