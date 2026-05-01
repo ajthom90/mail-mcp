@@ -4,5 +4,6 @@ mod client;
 mod labels;
 mod messages;
 mod parse;
+mod triage;
 
 pub use client::AuthClient;
