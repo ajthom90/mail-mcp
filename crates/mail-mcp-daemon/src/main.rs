@@ -1,3 +1,4 @@
+mod ipc_handler;
 mod lifecycle;
 mod mcp;
 
