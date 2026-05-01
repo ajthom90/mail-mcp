@@ -1,0 +1,14 @@
+// Default Xcode build settings for MailMCP.
+//
+// Per-developer overrides go in Config-Local.xcconfig (gitignored).
+// Add `#include "Config-Local.xcconfig"` to your local copy if you want
+// developer-specific settings without forking this file.
+//
+// IMPORTANT: Set MAIL_MCP_GOOGLE_CLIENT_ID to a Google Cloud Console
+// OAuth Desktop-app client_id before running the app for the first time.
+// The daemon needs it to start the OAuth flow for Gmail accounts.
+
+MAIL_MCP_GOOGLE_CLIENT_ID = your-client-id.apps.googleusercontent.com
+
+// Always include the local override last so it wins.
+#include? "Config-Local.xcconfig"
