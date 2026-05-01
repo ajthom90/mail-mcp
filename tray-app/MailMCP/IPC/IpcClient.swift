@@ -1,8 +1,13 @@
 import Foundation
-import Network
+import Darwin
 
 /// JSON-RPC 2.0 client over a Unix domain socket. Newline-delimited frames.
 /// Concurrency: actor — every request and notification is funneled through one task.
+///
+/// Built on BSD sockets (`socket(2)`/`connect(2)`) rather than `NWConnection`
+/// because the Network.framework receive callback does not reliably fire after
+/// `cancel()` over a UDS, hanging tests during teardown. `close(fd)` produces
+/// deterministic EOF on a blocking `read(2)`, which gives us clean shutdown.
 public actor IpcClient {
     public enum IpcError: Error, LocalizedError {
         case connectionRefused(String)
@@ -25,12 +30,16 @@ public actor IpcClient {
     }
 
     private let socketPath: URL
-    private var connection: NWConnection?
+    private var fd: Int32 = -1
     private var nextId: UInt64 = 1
     private var pending: [UInt64: CheckedContinuation<Data, Error>] = [:]
+    /// Frames routed to an `id` whose continuation hasn't been registered yet.
+    /// `call` checks this first when it goes to register, eliminating the race
+    /// where a fast response arrives before the awaiter is parked.
+    private var earlyResponses: [UInt64: Data] = [:]
     private var notificationContinuations: [UUID: AsyncStream<DaemonNotification>.Continuation] = [:]
-    private var readBuffer = Data()
-    private var receiveTask: Task<Void, Never>?
+    private var readerTask: Task<Void, Never>?
+    private var isClosed = false
 
     public init(socketPath: URL) {
         self.socketPath = socketPath
@@ -38,26 +47,66 @@ public actor IpcClient {
 
     /// Connect (or no-op if already connected). Throws if the socket is missing.
     public func connect() async throws {
-        if connection?.state == .ready { return }
-        let endpoint = NWEndpoint.unix(path: socketPath.path)
-        let conn = NWConnection(to: endpoint, using: .tcp)   // .tcp is fine for UDS framing
-        connection = conn
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            conn.stateUpdateHandler = { [weak self] state in
-                Task { [weak self] in
-                    await self?.handleState(state, connectCont: cont)
+        if fd >= 0 && !isClosed { return }
+
+        let path = socketPath.path
+        let pathBytes = Array(path.utf8)
+        // sockaddr_un.sun_path is 104 bytes on Darwin; require room for NUL.
+        guard pathBytes.count < 104 else {
+            throw IpcError.connectionRefused("socket path too long")
+        }
+
+        let s = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard s >= 0 else {
+            throw IpcError.connectionRefused(String(cString: strerror(errno)))
+        }
+
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        // Copy path into sun_path. `strncpy` zero-pads, ensuring NUL termination
+        // for any path under 103 bytes.
+        withUnsafeMutablePointer(to: &addr.sun_path) { ptr in
+            ptr.withMemoryRebound(to: CChar.self, capacity: 104) { dst in
+                _ = path.withCString { src in
+                    strncpy(dst, src, 103)
                 }
             }
-            conn.start(queue: .global(qos: .userInitiated))
         }
-        startReceiveLoop()
+
+        let result: Int32 = withUnsafePointer(to: &addr) { ap in
+            ap.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
+                Darwin.connect(s, sa, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        if result < 0 {
+            let err = String(cString: strerror(errno))
+            close(s)
+            throw IpcError.connectionRefused(err)
+        }
+
+        self.fd = s
+        self.isClosed = false
+
+        // Spawn a detached reader that does blocking reads. When `disconnect()`
+        // closes the fd, the read returns 0/-1 and the loop exits. The reader
+        // is `nonisolated` so its blocking `read(2)` does not occupy the actor's
+        // executor — `disconnect()` can therefore run while the reader is parked
+        // in `read(2)`, close the fd, and unblock the reader via EBADF.
+        let myFd = s
+        self.readerTask = Task.detached { [weak self] in
+            await Self.readLoop(fd: myFd, owner: self)
+        }
     }
 
     public func disconnect() {
-        connection?.cancel()
-        connection = nil
-        receiveTask?.cancel()
-        receiveTask = nil
+        guard !isClosed else { return }
+        isClosed = true
+        if fd >= 0 {
+            close(fd)
+            fd = -1
+        }
+        readerTask?.cancel()
+        readerTask = nil
         for (_, c) in pending { c.resume(throwing: IpcError.connectionClosed) }
         pending.removeAll()
         for (_, c) in notificationContinuations { c.finish() }
@@ -82,24 +131,28 @@ public actor IpcClient {
             throw IpcError.encoding(error)
         }
 
+        // Send first, then await the response. We tolerate the response
+        // arriving before we park on the continuation: `routeFrame` stashes
+        // unmatched frames in `earlyResponses`, and `awaitResponse` drains
+        // that buffer when it registers.
+        try writeFrame(frame)
+
         let body = try await withThrowingTaskGroup(of: Data.self) { group in
-            group.addTask {
-                try await withCheckedThrowingContinuation {
-                    (cont: CheckedContinuation<Data, Error>) in
-                    Task { await self.registerPending(id: id, cont: cont) }
-                }
+            group.addTask { [weak self] in
+                guard let self else { throw IpcError.connectionClosed }
+                return try await self.awaitResponse(id: id)
             }
             group.addTask {
                 try await Task.sleep(for: timeout)
                 throw IpcError.timeout
             }
-            try await self.send(frame)
-            guard let first = try await group.next() else { throw IpcError.connectionClosed }
+            guard let first = try await group.next() else {
+                throw IpcError.connectionClosed
+            }
             group.cancelAll()
             return first
         }
 
-        // Response is { id, result } or { id, error }
         do {
             let resp = try JSONDecoder().decode(Response<R>.self, from: body)
             if let err = resp.error {
@@ -119,9 +172,6 @@ public actor IpcClient {
     /// Subscribe to broadcast notifications. Calls `subscribe` RPC, then yields
     /// every matching notification until the returned stream is cancelled.
     public func subscribe(events: [String]) async throws -> AsyncStream<DaemonNotification> {
-        // Send the subscribe RPC and wait for its ack so the daemon's filter is
-        // populated before we register our local listener — mirrors the test-side
-        // synchronization guarantee from v0.1a IPC server.
         let _: SubscriptionAck = try await call(
             "subscribe",
             params: ["events": .array(events.map { .string($0) })]
@@ -141,14 +191,24 @@ public actor IpcClient {
 
     // MARK: - Internals
 
-    private func registerPending(id: UInt64, cont: CheckedContinuation<Data, Error>) {
-        pending[id] = cont
+    /// Suspends until a frame arrives for `id`. If the frame already arrived
+    /// before this call (stashed in `earlyResponses`), returns immediately.
+    private func awaitResponse(id: UInt64) async throws -> Data {
+        if isClosed { throw IpcError.connectionClosed }
+        if let early = earlyResponses.removeValue(forKey: id) {
+            return early
+        }
+        return try await withCheckedThrowingContinuation { cont in
+            // Register on the actor (we are already on the actor here).
+            pending[id] = cont
+        }
     }
 
     private func registerNotificationStream(
         id: UUID,
         cont: AsyncStream<DaemonNotification>.Continuation
     ) {
+        if isClosed { cont.finish(); return }
         notificationContinuations[id] = cont
     }
 
@@ -156,72 +216,71 @@ public actor IpcClient {
         notificationContinuations.removeValue(forKey: id)
     }
 
-    private func handleState(
-        _ state: NWConnection.State,
-        connectCont: CheckedContinuation<Void, Error>?
-    ) {
-        switch state {
-        case .ready:
-            connectCont?.resume()
-        case .failed(let err):
-            connectCont?.resume(throwing: IpcError.connectionRefused(err.localizedDescription))
-        case .cancelled:
-            connectCont?.resume(throwing: IpcError.connectionClosed)
-        default:
-            break
-        }
-    }
-
-    private func startReceiveLoop() {
-        receiveTask = Task { [weak self] in
-            await self?.receiveLoop()
-        }
-    }
-
-    private func receiveLoop() async {
-        guard let conn = connection else { return }
-        while !Task.isCancelled {
-            let chunk: Data? = await withCheckedContinuation { cont in
-                conn.receive(minimumIncompleteLength: 1, maximumLength: 8192) {
-                    data, _, isComplete, error in
-                    if let error {
-                        // Treat any error as EOF for our purposes.
-                        _ = error
-                        cont.resume(returning: nil)
-                    } else if isComplete {
-                        cont.resume(returning: data)
-                    } else {
-                        cont.resume(returning: data)
-                    }
+    /// Synchronous blocking write. Loops on EINTR and short writes.
+    private func writeFrame(_ data: Data) throws {
+        guard fd >= 0, !isClosed else { throw IpcError.connectionClosed }
+        let currentFd = fd
+        try data.withUnsafeBytes { (buf: UnsafeRawBufferPointer) -> Void in
+            var bytesLeft = data.count
+            var ptr = buf.baseAddress!
+            while bytesLeft > 0 {
+                let written = Darwin.write(currentFd, ptr, bytesLeft)
+                if written < 0 {
+                    if errno == EINTR { continue }
+                    throw IpcError.connectionClosed
                 }
-            }
-            guard let chunk, !chunk.isEmpty else {
-                // EOF or error — fail every pending request.
-                for (_, c) in pending { c.resume(throwing: IpcError.connectionClosed) }
-                pending.removeAll()
-                for (_, c) in notificationContinuations { c.finish() }
-                notificationContinuations.removeAll()
-                return
-            }
-            readBuffer.append(chunk)
-            while let nlIdx = readBuffer.firstIndex(of: 0x0a) {
-                let frame = readBuffer[readBuffer.startIndex..<nlIdx]
-                readBuffer.removeSubrange(readBuffer.startIndex...nlIdx)
-                routeFrame(Data(frame))
+                if written == 0 { throw IpcError.connectionClosed }
+                bytesLeft -= written
+                ptr = ptr.advanced(by: written)
             }
         }
     }
 
-    private func routeFrame(_ data: Data) {
-        // Either a response (has "id") or a notification (has "method" + "jsonrpc" but no "id"
-        // semantically — the daemon emits {jsonrpc, method, params} with no id).
+    /// Non-isolated reader. Runs on a detached task so blocking `read(2)` does
+    /// not pin the actor's executor; that is what allows `disconnect()` to
+    /// close the fd and unblock us via EBADF.
+    private static func readLoop(fd: Int32, owner: IpcClient?) async {
+        var buffer = Data()
+        let chunkSize = 4096
+        let chunk = UnsafeMutablePointer<UInt8>.allocate(capacity: chunkSize)
+        defer { chunk.deallocate() }
+        while !Task.isCancelled {
+            let n = Darwin.read(fd, chunk, chunkSize)
+            if n <= 0 { break } // EOF or error (e.g. EBADF after disconnect closes the fd)
+            buffer.append(chunk, count: n)
+            while let nl = buffer.firstIndex(of: 0x0a) {
+                let frame = Data(buffer[buffer.startIndex..<nl])
+                buffer.removeSubrange(buffer.startIndex...nl)
+                await owner?.routeFrame(frame)
+            }
+        }
+        await owner?.failOnEof()
+    }
+
+    fileprivate func failOnEof() {
+        guard !isClosed else { return }
+        isClosed = true
+        if fd >= 0 {
+            close(fd)
+            fd = -1
+        }
+        for (_, c) in pending { c.resume(throwing: IpcError.connectionClosed) }
+        pending.removeAll()
+        for (_, c) in notificationContinuations { c.finish() }
+        notificationContinuations.removeAll()
+    }
+
+    fileprivate func routeFrame(_ data: Data) {
+        // Either a response (has "id") or a notification (no id).
         if let id = peekId(data) {
             if let cont = pending.removeValue(forKey: id) {
                 cont.resume(returning: data)
+            } else {
+                // Awaiter hasn't parked yet — stash the response.
+                earlyResponses[id] = data
             }
             return
         }
-        // Notification.
         if let n = try? JSONDecoder().decode(DaemonNotification.self, from: data) {
             for (_, c) in notificationContinuations { c.yield(n) }
         }
@@ -230,17 +289,6 @@ public actor IpcClient {
     private func peekId(_ data: Data) -> UInt64? {
         struct IdOnly: Decodable { let id: UInt64? }
         return (try? JSONDecoder().decode(IdOnly.self, from: data))?.id
-    }
-
-    private func send(_ frame: Data) async throws {
-        guard let conn = connection else { throw IpcError.connectionClosed }
-        try await withCheckedThrowingContinuation {
-            (cont: CheckedContinuation<Void, Error>) in
-            conn.send(content: frame, completion: .contentProcessed { error in
-                if let error { cont.resume(throwing: IpcError.connectionRefused(error.localizedDescription)) }
-                else { cont.resume() }
-            })
-        }
     }
 }
 
@@ -269,5 +317,4 @@ public struct SubscriptionAck: Codable, Sendable {
     public let subscribed: [String]
 }
 
-// Conform empty-response helper.
 public struct Empty: Codable, Sendable { public init() {} }
