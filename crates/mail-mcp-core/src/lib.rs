@@ -3,6 +3,7 @@
 pub mod accounts;
 pub mod cache;
 pub mod error;
+pub mod logging;
 pub mod paths;
 pub mod permissions;
 pub mod secrets;
