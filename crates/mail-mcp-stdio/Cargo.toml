@@ -1,0 +1,24 @@
+[package]
+name = "mail-mcp-stdio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "mail-mcp-stdio"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap = { workspace = true }
+dirs.workspace = true
+mail-mcp-core = { path = "../mail-mcp-core" }
+reqwest = { workspace = true, features = ["blocking"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+wiremock.workspace = true

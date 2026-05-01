@@ -1,0 +1,40 @@
+[package]
+name = "mail-mcp-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "mail-mcp-daemon"
+path = "src/main.rs"
+
+[dependencies]
+mail-mcp-core = { path = "../mail-mcp-core" }
+anyhow.workspace = true
+async-trait.workspace = true
+axum.workspace = true
+base64.workspace = true
+chrono.workspace = true
+clap.workspace = true
+dirs.workspace = true
+fs2.workspace = true
+futures.workspace = true
+rand.workspace = true
+reqwest.workspace = true
+rmcp.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true
+ulid.workspace = true
+
+[dev-dependencies]
+reqwest = { workspace = true }
+tempfile = "3"
+tokio = { workspace = true, features = ["test-util", "macros"] }
+futures.workspace = true

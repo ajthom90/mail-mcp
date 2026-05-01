@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "0.1.0",
+  "transport": "json-rpc-2.0 over unix-domain-socket / named-pipe (newline-delimited)",
+  "methods": [
+    {"name": "status", "params": {}, "result": "Status"},
+    {"name": "accounts.list", "params": {}, "result": "AccountListItem[]"},
+    {"name": "accounts.add_oauth", "params": {"provider": "string"}, "result": "AccountAddOAuthInProgress"},
+    {"name": "accounts.complete_oauth", "params": {"challenge_id": "string", "label": "string"}, "result": "Account"},
+    {"name": "accounts.cancel_oauth", "params": {"challenge_id": "string"}, "result": "Empty"},
+    {"name": "accounts.remove", "params": {"account_id": "string"}, "result": "Empty"},
+    {"name": "permissions.get", "params": {"account_id": "string"}, "result": "PermissionMap"},
+    {"name": "permissions.set", "params": {"account_id": "string", "category": "string", "policy": "string"}, "result": "Empty"},
+    {"name": "approvals.list", "params": {}, "result": "PendingApproval[]"},
+    {"name": "approvals.decide", "params": {"id": "string", "decision": "approve|reject"}, "result": "Empty"},
+    {"name": "subscribe", "params": {"events": "string[]"}, "result": "SubscriptionAck"},
+    {"name": "settings.set_autostart", "params": {"enabled": "boolean"}, "result": "Empty"},
+    {"name": "settings.set_onboarding_complete", "params": {"complete": "boolean"}, "result": "Empty"},
+    {"name": "mcp.endpoint", "params": {}, "result": "McpEndpointInfo"},
+    {"name": "mcp.pause", "params": {"paused": "boolean"}, "result": "Empty"}
+  ],
+  "notifications": [
+    {"name": "approval.requested", "params": "PendingApproval"},
+    {"name": "approval.resolved", "params": {"id": "string", "decision": "approve|reject"}},
+    {"name": "account.added", "params": "Account"},
+    {"name": "account.removed", "params": {"account_id": "string"}},
+    {"name": "account.needs_reauth", "params": {"account_id": "string"}},
+    {"name": "mcp.paused_changed", "params": {"paused": "boolean"}}
+  ]
+}

@@ -1,0 +1,44 @@
+[package]
+name = "mail-mcp-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+keychain-tests = []
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+base64.workspace = true
+chrono.workspace = true
+dirs.workspace = true
+fs2.workspace = true
+keyring.workspace = true
+lru.workspace = true
+mail-builder.workspace = true
+mail-parser.workspace = true
+oauth2.workspace = true
+percent-encoding.workspace = true
+rand.workspace = true
+regex = "1"
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+tracing.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true
+ulid.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+wiremock.workspace = true
+tempfile = "3"
