@@ -31,4 +31,8 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: cargo test
-        run: cargo test --workspace --all-features
+        # Note: --all-features deliberately omitted because the `keychain-tests`
+        # feature in mail-mcp-core requires a running OS keychain (Keychain on
+        # macOS, gnome-keyring/kwallet on Linux). Linux runners don't have one.
+        # `keychain-tests` is for manual local verification.
+        run: cargo test --workspace
