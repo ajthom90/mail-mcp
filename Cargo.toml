@@ -25,7 +25,7 @@ clap = { version = "4", features = ["derive", "env"] }
 dirs = "5"
 fs2 = "0.4"
 futures = "0.3"
-keyring = "3"
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 lru = "0.12"
 mail-builder = "0.4"
 mail-parser = "0.9"
