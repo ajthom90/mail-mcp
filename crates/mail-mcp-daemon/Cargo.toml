@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 mail-mcp-core = { path = "../mail-mcp-core" }
 anyhow.workspace = true
+async-trait.workspace = true
 axum.workspace = true
 clap.workspace = true
 dirs.workspace = true
@@ -25,3 +26,6 @@ tower-http.workspace = true
 tracing.workspace = true
 tracing-appender.workspace = true
 tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
