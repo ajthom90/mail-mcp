@@ -1,5 +1,6 @@
 //! mail-mcp core library.
 
+pub mod accounts;
 pub mod error;
 pub mod paths;
 pub mod storage;

@@ -43,7 +43,6 @@ impl Storage {
     }
 
     /// Access the inner pool for module-internal queries.
-    #[allow(dead_code)]
     pub(crate) fn pool(&self) -> &SqlitePool {
         &self.pool
     }
