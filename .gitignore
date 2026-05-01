@@ -1,0 +1,47 @@
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Editor / IDE
+.idea/
+.vscode/
+*.code-workspace
+
+# Rust (Cargo workspace)
+target/
+**/*.rs.bk
+*.pdb
+
+# Xcode / SwiftUI app (apps/mac/)
+**/xcuserdata/
+**/*.xcuserstate
+**/DerivedData/
+**/build/
+**/*.xcworkspace/xcuserdata/
+
+# .NET / WinUI 3 app (apps/win/)
+**/bin/
+**/obj/
+**/*.user
+**/.vs/
+**/*.suo
+
+# Meson / GTK app (apps/linux/)
+apps/linux/build*/
+apps/linux/subprojects/packagecache/
+
+# Generated IPC types (regenerated from proto/ipc-schema.json)
+crates/mail-mcp-core/src/ipc/types.generated.rs
+apps/mac/MailMCP/IpcTypes.generated.swift
+apps/win/Generated/IpcTypes.generated.cs
+apps/linux/src/ipc_types.generated.h
+apps/linux/src/ipc_types.generated.c
+
+# Local secrets / state (should never be checked in even if accidentally created in workspace)
+*.pem
+*.key
+.env
+.env.local
+endpoint.json
+state.db
