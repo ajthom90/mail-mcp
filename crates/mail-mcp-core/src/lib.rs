@@ -3,6 +3,7 @@
 pub mod accounts;
 pub mod error;
 pub mod paths;
+pub mod permissions;
 pub mod storage;
 pub mod types;
 
