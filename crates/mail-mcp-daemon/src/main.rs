@@ -1,3 +1,4 @@
+mod lifecycle;
 mod mcp;
 
 fn main() {
