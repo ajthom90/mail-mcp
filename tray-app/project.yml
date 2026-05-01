@@ -1,0 +1,88 @@
+name: MailMCP
+options:
+  bundleIdPrefix: com.ajthom90
+  deploymentTarget:
+    macOS: "14.0"
+  developmentLanguage: en
+  xcodeVersion: "15.0"
+configs:
+  Debug: debug
+  Release: release
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+    GCC_TREAT_WARNINGS_AS_ERRORS: YES
+    DEAD_CODE_STRIPPING: YES
+    ENABLE_HARDENED_RUNTIME: YES
+    CODE_SIGN_STYLE: Automatic
+configFiles:
+  Debug: Config-Default.xcconfig
+  Release: Config-Default.xcconfig
+targets:
+  MailMCP:
+    type: application
+    platform: macOS
+    sources:
+      - path: MailMCP
+    resources:
+      - path: MailMCP/Resources/Assets.xcassets
+    info:
+      path: MailMCP/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: MailMCP
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleName: $(PRODUCT_NAME)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSUIElement: true
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        NSHumanReadableCopyright: "© 2026"
+        MAIL_MCP_GOOGLE_CLIENT_ID: $(MAIL_MCP_GOOGLE_CLIENT_ID)
+    preBuildScripts:
+      - name: Build daemon (cargo)
+        script: |
+          # Forward to BuildScripts/build-daemon.sh
+          "${SRCROOT}/BuildScripts/build-daemon.sh"
+        inputFiles:
+          - $(SRCROOT)/../crates/mail-mcp-daemon/Cargo.toml
+        outputFiles:
+          - $(BUILT_PRODUCTS_DIR)/$(EXECUTABLE_FOLDER_PATH)/mail-mcp-daemon
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ajthom90.MailMCP
+        ENABLE_APP_SANDBOX: NO
+  MailMCPTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: MailMCPTests
+    dependencies:
+      - target: MailMCP
+    settings:
+      base:
+        BUNDLE_LOADER: $(TEST_HOST)
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/MailMCP.app/Contents/MacOS/MailMCP
+  MailMCPUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: MailMCPUITests
+    dependencies:
+      - target: MailMCP
+    settings:
+      base:
+        TEST_TARGET_NAME: MailMCP
+schemes:
+  MailMCP:
+    build:
+      targets:
+        MailMCP: all
+        MailMCPTests: [test]
+        MailMCPUITests: [test]
+    test:
+      targets:
+        - MailMCPTests
+        - MailMCPUITests
