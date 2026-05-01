@@ -1,11 +1,11 @@
 //! mail-mcp core library.
 
 pub mod error;
+pub mod paths;
 pub mod types;
 
 #[cfg(test)]
 mod tests {
-    // (existing test)
     use super::error::Error;
 
     #[test]

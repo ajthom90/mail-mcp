@@ -34,3 +34,4 @@ url.workspace = true
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
 wiremock.workspace = true
+tempfile = "3"
