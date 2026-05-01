@@ -16,17 +16,34 @@ export PATH="$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
 cd "${WORKSPACE_ROOT}"
 
+# Resolve cargo. Setups vary: the standard rustup install puts shims in
+# ~/.cargo/bin, but Homebrew's rustup leaves no shim. `rustup which cargo`
+# resolves to the active toolchain (respects rust-toolchain.toml in cwd).
+if command -v cargo >/dev/null 2>&1; then
+    CARGO=cargo
+    RUSTUP=rustup
+elif command -v rustup >/dev/null 2>&1; then
+    CARGO="$(rustup which cargo)"
+    RUSTUP=rustup
+    # cargo invokes `rustc` from PATH; make sure the right toolchain bin dir is on it.
+    export PATH="$(dirname "$CARGO"):$PATH"
+else
+    echo "error: neither cargo nor rustup found on PATH" >&2
+    echo "       PATH=$PATH" >&2
+    exit 1
+fi
+
 if [ "${CONFIGURATION}" = "Release" ]; then
-    rustup target add aarch64-apple-darwin x86_64-apple-darwin >/dev/null
-    cargo build --release --target aarch64-apple-darwin -p "${DAEMON_NAME}"
-    cargo build --release --target x86_64-apple-darwin  -p "${DAEMON_NAME}"
+    $RUSTUP target add aarch64-apple-darwin x86_64-apple-darwin >/dev/null
+    $CARGO build --release --target aarch64-apple-darwin -p "${DAEMON_NAME}"
+    $CARGO build --release --target x86_64-apple-darwin  -p "${DAEMON_NAME}"
     mkdir -p "$(dirname "${DEST}")"
     lipo -create \
         "target/aarch64-apple-darwin/release/${DAEMON_NAME}" \
         "target/x86_64-apple-darwin/release/${DAEMON_NAME}" \
         -output "${DEST}"
 else
-    cargo build -p "${DAEMON_NAME}"
+    $CARGO build -p "${DAEMON_NAME}"
     mkdir -p "$(dirname "${DEST}")"
     cp "target/debug/${DAEMON_NAME}" "${DEST}"
 fi
