@@ -2,6 +2,7 @@
 
 pub mod error;
 pub mod paths;
+pub mod storage;
 pub mod types;
 
 #[cfg(test)]
