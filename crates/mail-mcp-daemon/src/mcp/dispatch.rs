@@ -76,7 +76,19 @@ pub async fn dispatch(
             "{}: blocked by user policy",
             tool.name
         ))),
-        EnforceOutcome::ConvertToDraft => convert_send_to_draft(&*provider, tool.name, args).await,
+        EnforceOutcome::ConvertToDraft => {
+            if tool.name == "send_draft" {
+                // The draft already exists; Draftify means "don't send it now".
+                let draft_id = args.get("draft_id").and_then(|v| v.as_str()).unwrap_or("");
+                Ok(serde_json::json!({
+                    "result": "send_held",
+                    "draft_id": draft_id,
+                    "note": "Send was held per user policy. The draft remains in your drafts folder; please review and send from your mail client."
+                }))
+            } else {
+                convert_send_to_draft(&*provider, tool.name, args).await
+            }
+        }
         EnforceOutcome::Proceed => execute(&*provider, tool.name, args).await,
     }
 }
@@ -503,5 +515,21 @@ mod tests {
         let res = dispatch(&ctx, tool, args).await.unwrap();
         assert_eq!(res["result"], "draft_created");
         assert_eq!(fake.last_call.lock().await.as_deref(), Some("create_draft"));
+    }
+
+    #[tokio::test]
+    async fn send_draft_default_policy_holds_send() {
+        let (ctx, id, fake) = ctx().await;
+        let tools = crate::mcp::tools::tools();
+        let tool = tools.iter().find(|t| t.name == "send_draft").unwrap();
+        let args = serde_json::json!({
+            "account_id": id.to_string(),
+            "draft_id": "d-123"
+        });
+        let res = dispatch(&ctx, tool, args).await.unwrap();
+        assert_eq!(res["result"], "send_held");
+        assert_eq!(res["draft_id"], "d-123");
+        // Provider must NOT have been touched: nothing was actually sent.
+        assert!(fake.last_call.lock().await.is_none());
     }
 }
