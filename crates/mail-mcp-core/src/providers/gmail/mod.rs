@@ -2,5 +2,7 @@
 
 mod client;
 mod labels;
+mod messages;
+mod parse;
 
 pub use client::AuthClient;
