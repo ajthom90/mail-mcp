@@ -8,6 +8,7 @@ use crate::error::Result;
 use serde::{Deserialize, Serialize};
 
 pub mod google;
+pub mod loopback;
 
 /// Static configuration for an OAuth provider that this daemon knows how to talk to.
 #[derive(Debug, Clone, Serialize, Deserialize)]
