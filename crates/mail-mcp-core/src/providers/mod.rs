@@ -1,3 +1,4 @@
+pub mod gmail;
 pub mod r#trait;
 pub mod types;
 
