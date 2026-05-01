@@ -166,6 +166,25 @@ impl Permissions {
     }
 }
 
+impl Permissions {
+    /// Build an in-memory Permissions populated entirely with defaults. Useful for tests
+    /// and for the in-memory cache the daemon holds for active enforcement.
+    pub fn with_defaults() -> Self {
+        let mut map = HashMap::new();
+        for cat in Category::ALL {
+            map.insert(*cat, default_policy(*cat));
+        }
+        Permissions { map }
+    }
+
+    /// Override a single category. Used by enforcement-cache reload paths.
+    pub fn override_for(&mut self, cat: Category, policy: Policy) {
+        self.map.insert(cat, policy);
+    }
+}
+
+pub mod enforce;
+
 #[cfg(test)]
 mod tests {
     use super::*;
