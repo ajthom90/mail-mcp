@@ -10,10 +10,10 @@ name = "mail-mcp-admin"
 path = "src/main.rs"
 
 [dependencies]
-mail-mcp-core = { path = "../mail-mcp-core" }
 anyhow.workspace = true
 clap.workspace = true
 dirs.workspace = true
+mail-mcp-core = { path = "../mail-mcp-core" }
 serde.workspace = true
 serde_json.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-util", "net"] }
