@@ -36,3 +36,29 @@ jobs:
         # macOS, gnome-keyring/kwallet on Linux). Linux runners don't have one.
         # `keychain-tests` is for manual local verification.
         run: cargo test --workspace
+      - name: install xcodegen (macOS only)
+        if: runner.os == 'macOS'
+        run: brew install xcodegen
+      - name: write stub Config-Local.xcconfig (macOS only)
+        if: runner.os == 'macOS'
+        working-directory: tray-app
+        run: |
+          cp Config-Default.xcconfig Config-Local.xcconfig
+          # build-daemon.sh and the build phase don't actually need a valid OAuth
+          # client_id at compile time — only the daemon at runtime does. CI just
+          # needs the build setting to be defined.
+          printf 'MAIL_MCP_GOOGLE_CLIENT_ID = ci-dummy.apps.googleusercontent.com\n' >> Config-Local.xcconfig
+      - name: xcodegen generate (macOS only)
+        if: runner.os == 'macOS'
+        working-directory: tray-app
+        run: xcodegen generate
+      - name: xcodebuild test (macOS only)
+        if: runner.os == 'macOS'
+        working-directory: tray-app
+        run: |
+          xcodebuild test \
+            -scheme MailMCP \
+            -destination "platform=macOS" \
+            -only-testing:MailMCPTests \
+            CODE_SIGNING_ALLOWED=NO \
+            -quiet
