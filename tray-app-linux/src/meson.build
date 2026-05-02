@@ -1,6 +1,7 @@
 sources = files(
   'main.c',
   'paths.c',
+  'ipc/models.c',
 )
 
 executable('mail-mcp-tray',
