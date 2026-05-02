@@ -16,6 +16,7 @@ final class MenuBarController {
     private var observation: AnyCancellable?
     private lazy var wizard = WizardController(client: client)
     private lazy var accountsVM = AccountsViewModel(client: client)
+    private lazy var approvals = ApprovalCoordinator(client: client)
     private var settingsWindow: NSWindow?
 
     init(paths: MailMCPPaths = .defaultForUser()) {
@@ -38,6 +39,7 @@ final class MenuBarController {
                 try await launcher.ensureRunning()
                 statusVM.start()
                 accountsVM.start()
+                approvals.start()
                 await maybeOpenWizard()
                 // Repaint the menu every time the VM's `status` changes.
                 withObservationTracking {
