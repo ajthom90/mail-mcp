@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod google;
 pub mod loopback;
+pub mod microsoft;
 
 /// Static configuration for an OAuth provider that this daemon knows how to talk to.
 #[derive(Debug, Clone, Serialize, Deserialize)]
