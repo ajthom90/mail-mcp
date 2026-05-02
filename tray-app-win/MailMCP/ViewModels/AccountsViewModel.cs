@@ -73,9 +73,10 @@ public partial class AccountsViewModel : ObservableObject
     {
         try
         {
-            await foreach (var note in _client.SubscribeAsync(
+            var stream = await _client.SubscribeAsync(
                 new[] { "account.added", "account.removed", "account.needs_reauth" }, ct)
-                .ConfigureAwait(false))
+                .ConfigureAwait(false);
+            await foreach (var note in stream.WithCancellation(ct).ConfigureAwait(false))
             {
                 _ = note;  // any of these means refresh
                 await RefreshAsync(ct).ConfigureAwait(false);

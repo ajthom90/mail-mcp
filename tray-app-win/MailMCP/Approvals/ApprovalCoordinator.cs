@@ -29,8 +29,9 @@ public sealed class ApprovalCoordinator : IAsyncDisposable
     {
         try
         {
-            await foreach (var note in _client.SubscribeAsync(
-                new[] { "approval.requested" }, ct).ConfigureAwait(false))
+            var stream = await _client.SubscribeAsync(
+                new[] { "approval.requested" }, ct).ConfigureAwait(false);
+            await foreach (var note in stream.WithCancellation(ct).ConfigureAwait(false))
             {
                 if (note is DaemonNotification.ApprovalRequested ar)
                 {

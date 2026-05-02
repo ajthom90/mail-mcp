@@ -110,22 +110,30 @@ public sealed class IpcClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// Subscribe to daemon notifications. The returned <see cref="IAsyncEnumerable{T}"/>
-    /// yields each matching notification until the enumerator is disposed or
-    /// the connection drops. Sends the JSON-RPC `subscribe` request and waits
-    /// for the ack BEFORE yielding any notifications, mirroring the Rust + Swift
-    /// fix for issue #6.
+    /// Subscribe to daemon notifications. Sends the JSON-RPC `subscribe`
+    /// request and AWAITS the ack before returning, mirroring the Rust + Swift
+    /// fix for issue #6 — notifications arriving on the wire after this
+    /// returns are guaranteed to be routed to the returned stream.
+    ///
+    /// The two-stage signature matters: an `async IAsyncEnumerable` iterator
+    /// would defer the subscribe RPC until the caller starts iterating, which
+    /// re-opens the same race the issue-#6 fix closes.
     /// </summary>
-    public async IAsyncEnumerable<DaemonNotification> SubscribeAsync(
+    public async Task<IAsyncEnumerable<DaemonNotification>> SubscribeAsync(
         string[] events,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        CancellationToken ct = default)
     {
-        // Acknowledge the subscribe RPC first so any notifications fired
-        // afterwards arrive after `subscribed` is populated server-side.
         _ = await CallAsync("subscribe", new { events }, ct).ConfigureAwait(false);
 
         var channel = Channel<DaemonNotification>.Create();
         lock (_channelsLock) { _notificationChannels.Add(channel); }
+        return IterateAsync(channel, ct);
+    }
+
+    private async IAsyncEnumerable<DaemonNotification> IterateAsync(
+        Channel<DaemonNotification> channel,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    {
         try
         {
             await foreach (var n in channel.ReadAllAsync(ct).ConfigureAwait(false))

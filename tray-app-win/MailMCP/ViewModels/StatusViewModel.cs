@@ -68,7 +68,7 @@ public partial class StatusViewModel : ObservableObject
     {
         try
         {
-            await foreach (var note in _client.SubscribeAsync(
+            var stream = await _client.SubscribeAsync(
                 new[]
                 {
                     "approval.requested",
@@ -76,7 +76,8 @@ public partial class StatusViewModel : ObservableObject
                     "account.added",
                     "account.removed",
                     "mcp.paused_changed",
-                }, ct).ConfigureAwait(false))
+                }, ct).ConfigureAwait(false);
+            await foreach (var note in stream.WithCancellation(ct).ConfigureAwait(false))
             {
                 switch (note)
                 {

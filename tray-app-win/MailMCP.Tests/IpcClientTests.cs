@@ -52,11 +52,10 @@ public class IpcClientTests
         await client.ConnectAsync();
 
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-        var stream = client.SubscribeAsync(new[] { "mcp.paused_changed" }, cts.Token);
+        // SubscribeAsync awaits the `subscribe` ack before returning, so the
+        // notification we push next is guaranteed to land in the channel.
+        var stream = await client.SubscribeAsync(new[] { "mcp.paused_changed" }, cts.Token);
 
-        // Push the notification AFTER subscribe is acknowledged. The default
-        // mock-server response for `subscribe` returns subscribed:[] so the
-        // client's await unblocks before we push.
         await server.PushNotificationAsync("""
             {"jsonrpc":"2.0","method":"mcp.paused_changed","params":{"paused":true}}
             """);
