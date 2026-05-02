@@ -36,9 +36,17 @@ jobs:
         # macOS, gnome-keyring/kwallet on Linux). Linux runners don't have one.
         # `keychain-tests` is for manual local verification.
         run: cargo test --workspace
-      - name: install xcodegen (macOS only)
+      - name: install xcodegen 2.44.0 (macOS only)
         if: runner.os == 'macOS'
-        run: brew install xcodegen
+        # Homebrew currently ships 2.45.x which segfaults on macos-14 runners
+        # while generating the project. Pin to 2.44.0 by fetching the release
+        # zip directly and using its bundled install.sh.
+        run: |
+          curl -fsSL -o /tmp/xcodegen.zip \
+            https://github.com/yonaskolb/XcodeGen/releases/download/2.44.0/xcodegen.zip
+          unzip -q /tmp/xcodegen.zip -d /tmp/
+          sudo bash /tmp/xcodegen/install.sh /usr/local
+          xcodegen --version
       - name: write stub Config-Local.xcconfig (macOS only)
         if: runner.os == 'macOS'
         working-directory: tray-app
