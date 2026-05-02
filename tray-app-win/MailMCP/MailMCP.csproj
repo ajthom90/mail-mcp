@@ -25,9 +25,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.5.240607000" />
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.756" />
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+    <!-- Floating-point patch versions: Microsoft.WindowsAppSDK occasionally
+         bumps the build-number suffix between when this file is authored
+         and when CI restores; pinning the exact build number causes spurious
+         restore failures. The TreatWarningsAsErrors above also flags
+         NU1603 ("resolved a higher version than requested") so we float to
+         avoid both classes of failure. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.5.*" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.*" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.*" />
   </ItemGroup>
 
   <Target Name="BuildDaemon" BeforeTargets="Build">
