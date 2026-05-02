@@ -78,3 +78,53 @@ jobs:
             -only-testing:MailMCPUITests/WizardSmokeTests \
             CODE_SIGNING_ALLOWED=NO \
             -quiet
+
+  cross-compile:
+    name: Cross-compile ${{ matrix.target }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS Intel cross-compiled from arm64 host.
+          - os: macos-15
+            target: x86_64-apple-darwin
+          # Linux arm64 cross-compiled from amd64 host.
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            linker_pkg: gcc-aarch64-linux-gnu
+            linker_bin: aarch64-linux-gnu-gcc
+          # Linux RISC-V (riscv64gc) cross-compiled from amd64 host.
+          - os: ubuntu-latest
+            target: riscv64gc-unknown-linux-gnu
+            linker_pkg: gcc-riscv64-linux-gnu
+            linker_bin: riscv64-linux-gnu-gcc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: install cross linker + libdbus dev (Linux targets)
+        if: runner.os == 'Linux'
+        run: |
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then break; fi
+            sleep 10
+          done
+          sudo apt-get install -y pkg-config libdbus-1-dev ${{ matrix.linker_pkg }}
+      - name: configure cross linker (Linux targets)
+        if: runner.os == 'Linux'
+        run: |
+          # Tell cargo which linker to use for the cross target.
+          TARGET_UPPER=$(echo '${{ matrix.target }}' | tr 'a-z-' 'A-Z_')
+          echo "CARGO_TARGET_${TARGET_UPPER}_LINKER=${{ matrix.linker_bin }}" >> "$GITHUB_ENV"
+          # libdbus-sys (transitive via keyring) needs to find dbus headers/libs
+          # for the *target* arch. Without a true sysroot we fall back to telling
+          # pkg-config the system has dbus installed; this is enough for `cargo check`
+          # to type-check, though a full link will require a target-arch sysroot.
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: cross-${{ matrix.target }}
+      - name: cargo check --workspace --target ${{ matrix.target }}
+        run: cargo check --workspace --target ${{ matrix.target }}
