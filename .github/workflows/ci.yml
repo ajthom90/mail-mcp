@@ -137,3 +137,39 @@ jobs:
           key: cross-${{ matrix.target }}
       - name: cargo check --workspace --target ${{ matrix.target }}
         run: cargo check --workspace --target ${{ matrix.target }}
+
+  # Builds + tests the .NET 8 / WinUI 3 tray app on a Windows runner. The
+  # csproj has a BuildDaemon target that invokes cargo for the daemon binary,
+  # so this job exercises the cargo→.NET integration end-to-end.
+  windows-tray:
+    name: Windows tray (${{ matrix.platform }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x64]
+        # arm64 cross-build is supported by the project, but xunit.runner.visualstudio
+        # doesn't ship arm64 hosts, so we only RUN tests on x64. The arm64 build
+        # gets covered by the `Cross-compile aarch64-pc-windows-msvc` job.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: rustup target add x86_64-pc-windows-msvc
+        # The workspace pins 1.88; install the target for that toolchain.
+        run: rustup target add x86_64-pc-windows-msvc
+      - name: setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-tray-${{ matrix.platform }}
+      - name: dotnet restore
+        working-directory: tray-app-win
+        run: dotnet restore MailMCP.sln /p:Platform=${{ matrix.platform }}
+      - name: dotnet build
+        working-directory: tray-app-win
+        run: dotnet build MailMCP.sln -c Debug -p:Platform=${{ matrix.platform }} --no-restore
+      - name: dotnet test
+        working-directory: tray-app-win
+        run: dotnet test MailMCP.Tests/MailMCP.Tests.csproj -c Debug -p:Platform=${{ matrix.platform }} --no-build --logger "console;verbosity=normal"

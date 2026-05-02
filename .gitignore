@@ -50,3 +50,9 @@ state.db
 tray-app/Config-Local.xcconfig
 tray-app/build/
 tray-app/DerivedData/
+
+# tray-app-win build artifacts (handled in tray-app-win/.gitignore)
+tray-app-win/**/bin/
+tray-app-win/**/obj/
+tray-app-win/.vs/
+tray-app-win/Signing.local.props
