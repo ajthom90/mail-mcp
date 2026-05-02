@@ -1,21 +1,21 @@
 use anyhow::{anyhow, bail, Context, Result};
+use mail_mcp_core::ipc::IpcStream;
 use serde::Deserialize;
 use std::path::Path;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::UnixStream;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf};
 
 pub struct IpcClient {
-    reader: BufReader<tokio::net::unix::OwnedReadHalf>,
-    writer: tokio::net::unix::OwnedWriteHalf,
+    reader: BufReader<ReadHalf<IpcStream>>,
+    writer: WriteHalf<IpcStream>,
     next_id: u64,
 }
 
 impl IpcClient {
     pub async fn connect(socket: &Path) -> Result<Self> {
-        let stream = UnixStream::connect(socket)
+        let stream = IpcStream::connect(socket)
             .await
             .with_context(|| format!("connecting to {}", socket.display()))?;
-        let (rx, tx) = stream.into_split();
+        let (rx, tx) = tokio::io::split(stream);
         Ok(Self {
             reader: BufReader::new(rx),
             writer: tx,

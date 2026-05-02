@@ -14,7 +14,7 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
     use tokio::io::AsyncBufReadExt;
-    use tokio::net::UnixStream;
+    use super::super::transport::IpcStream;
 
     struct Echo;
     #[async_trait]
@@ -45,7 +45,7 @@ mod tests {
         let p = path.clone();
         let _h = tokio::spawn(async move { server.bind_and_serve(&p).await.unwrap() });
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        let mut sock = UnixStream::connect(&path).await.unwrap();
+        let mut sock = IpcStream::connect(&path).await.unwrap();
         sock.write_all(
             b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"echo\",\"params\":{\"a\":1}}\n",
         )
@@ -67,7 +67,7 @@ mod tests {
         let p = path.clone();
         let _h = tokio::spawn(async move { server.bind_and_serve(&p).await.unwrap() });
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        let mut sock = UnixStream::connect(&path).await.unwrap();
+        let mut sock = IpcStream::connect(&path).await.unwrap();
         sock.write_all(b"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"nope\"}\n")
             .await
             .unwrap();
@@ -87,8 +87,8 @@ mod tests {
         let p = path.clone();
         let _h = tokio::spawn(async move { server.bind_and_serve(&p).await.unwrap() });
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        let sock = UnixStream::connect(&path).await.unwrap();
-        let (rx, mut tx) = sock.into_split();
+        let sock = IpcStream::connect(&path).await.unwrap();
+        let (rx, mut tx) = tokio::io::split(sock);
         // Subscribe to the event we'll broadcast below.
         tx.write_all(b"{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"subscribe\",\"params\":{\"events\":[\"mcp.paused_changed\"]}}\n").await.unwrap();
 
@@ -134,8 +134,8 @@ mod tests {
         let _h = tokio::spawn(async move { server.bind_and_serve(&p).await.unwrap() });
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-        let sock = UnixStream::connect(&path).await.unwrap();
-        let (rx, mut tx) = sock.into_split();
+        let sock = IpcStream::connect(&path).await.unwrap();
+        let (rx, mut tx) = tokio::io::split(sock);
         let mut reader = BufReader::new(rx);
 
         // Connect, then fire a "pre-subscribe" notification BEFORE sending
@@ -177,8 +177,8 @@ mod tests {
         let p = path.clone();
         let _h = tokio::spawn(async move { server.bind_and_serve(&p).await.unwrap() });
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        let sock = UnixStream::connect(&path).await.unwrap();
-        let (rx, mut tx) = sock.into_split();
+        let sock = IpcStream::connect(&path).await.unwrap();
+        let (rx, mut tx) = tokio::io::split(sock);
         let mut reader = BufReader::new(rx);
 
         // Subscribe twice.
@@ -236,27 +236,13 @@ impl Server {
         }
     }
 
-    /// Bind the UDS at `path` (unlinking any stale file) and serve forever.
+    /// Bind the IPC endpoint at `path` and serve forever. On Unix this is a
+    /// UDS path (mkdir-p + chmod tightening happens inside `IpcListener::bind`);
+    /// on Windows it's a named-pipe address (`\\.\pipe\mail-mcp-<USERNAME>`).
     pub async fn bind_and_serve(self, path: &Path) -> Result<()> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
-            }
-        }
-        if path.exists() {
-            std::fs::remove_file(path)?;
-        }
-        let listener = tokio::net::UnixListener::bind(path)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
-        }
+        let listener = super::transport::IpcListener::bind(path)?;
         loop {
-            let (sock, _addr) = listener.accept().await?;
+            let sock = listener.accept().await?;
             let handler = self.handler.clone();
             // Pass the Sender, not a Receiver: serve_conn defers
             // broadcast::subscribe() until the client's `subscribe` RPC arrives,
@@ -273,11 +259,13 @@ impl Server {
 }
 
 async fn serve_conn(
-    sock: tokio::net::UnixStream,
+    sock: super::transport::IpcStream,
     handler: Arc<dyn Handler>,
     notif_sender: broadcast::Sender<Notification>,
 ) -> Result<()> {
-    let (rx, tx) = sock.into_split();
+    // tokio::io::split works on any AsyncRead+AsyncWrite, so this is the
+    // same on Unix (UnixStream) and Windows (NamedPipeServer).
+    let (rx, tx) = tokio::io::split(sock);
     let mut reader = BufReader::new(rx);
     let writer = Arc::new(tokio::sync::Mutex::new(tx));
 

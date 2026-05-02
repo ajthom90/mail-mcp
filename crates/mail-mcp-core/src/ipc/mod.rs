@@ -3,5 +3,7 @@
 
 pub mod messages;
 pub mod server;
+pub mod transport;
 
 pub use messages::*;
+pub use transport::{IpcListener, IpcStream};

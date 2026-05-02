@@ -99,6 +99,12 @@ jobs:
             target: riscv64gc-unknown-linux-gnu
             linker_pkg: gcc-riscv64-linux-gnu
             linker_bin: riscv64-linux-gnu-gcc
+          # Windows amd64 (host on the windows-latest runner).
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          # Windows arm64 (cross-compile from amd64 windows-latest).
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
