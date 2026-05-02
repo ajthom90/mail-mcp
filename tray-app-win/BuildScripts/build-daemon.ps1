@@ -33,6 +33,12 @@ if (-not $OutDir) {
     throw "OutDir parameter required"
 }
 
+# MSBuild's $(OutDir) ends with a trailing backslash. When that's wrapped in
+# &quot;...&quot; in the csproj Exec command, PowerShell sees `path\"` and the
+# `\` escapes the quote, leaving a literal `"` at the end of the parameter.
+# Strip both characters defensively.
+$OutDir = $OutDir.TrimEnd('"', '\')
+
 # Resolve cargo. Prefer the rustup-managed toolchain installer's shim
 # at $env:USERPROFILE\.cargo\bin\cargo.exe; fall back to PATH.
 $CargoExe = Join-Path $env:USERPROFILE ".cargo\bin\cargo.exe"
