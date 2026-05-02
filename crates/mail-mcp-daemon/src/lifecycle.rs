@@ -43,16 +43,39 @@ impl Drop for PidLock {
 }
 
 pub fn write_endpoint(path: &Path, info: &McpEndpointInfo) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(parent)?;
     let bytes = serde_json::to_vec_pretty(info)?;
-    std::fs::write(path, bytes)?;
-    #[cfg(unix)]
+
+    // Write to a sibling temp file with restrictive perms set at create time,
+    // then atomically rename onto `path`. This avoids the TOCTOU window where
+    // a vanilla `fs::write` + later `set_permissions` would briefly leave the
+    // bearer-token file world-readable under the default umask.
+    let mut tmp = std::ffi::OsString::from(
+        path.file_name()
+            .ok_or_else(|| anyhow::anyhow!("endpoint path has no file name"))?,
+    );
+    tmp.push(format!(".tmp.{}", std::process::id()));
+    let tmp_path = parent.join(tmp);
+
     {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+        let mut opts = OpenOptions::new();
+        opts.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        let mut f = opts
+            .open(&tmp_path)
+            .with_context(|| format!("creating endpoint temp file {}", tmp_path.display()))?;
+        f.write_all(&bytes)?;
+        f.sync_all().ok();
     }
+    // Atomic on POSIX. On Windows std::fs::rename will replace the destination
+    // if it exists (since 1.5.0).
+    std::fs::rename(&tmp_path, path)
+        .with_context(|| format!("renaming {} → {}", tmp_path.display(), path.display()))?;
     Ok(())
 }
 
@@ -108,5 +131,40 @@ mod tests {
             serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
         assert_eq!(loaded.url, info.url);
         assert_eq!(loaded.bearer_token, info.bearer_token);
+    }
+
+    /// Regression for the v0.1a TOCTOU bug: an existing endpoint file with the
+    /// wrong perms must NOT be writable in any world-readable intermediate
+    /// state. The atomic-rename path means the destination is either the old
+    /// 0o600 file or the new 0o600 file — never a 0o644 in-flight write.
+    #[cfg(unix)]
+    #[test]
+    fn endpoint_overwrite_keeps_perms_tight() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("ep.json");
+
+        // Pre-seed the destination with 0o644 to simulate a stale file.
+        std::fs::write(&path, b"old").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        let info = McpEndpointInfo {
+            url: "http://127.0.0.1:65000/mcp".into(),
+            bearer_token: "secret".into(),
+            stdio_shim_path: None,
+        };
+        write_endpoint(&path, &info).unwrap();
+        // The file exists, has the new contents, and is 0o600.
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "endpoint.json should be 0o600 after overwrite");
+        let s = std::fs::read_to_string(&path).unwrap();
+        assert!(s.contains("secret"));
+        // No leftover *.tmp.* sibling.
+        let strays: Vec<_> = std::fs::read_dir(tmp.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().contains(".tmp."))
+            .collect();
+        assert!(strays.is_empty(), "temp file leaked: {strays:?}");
     }
 }
