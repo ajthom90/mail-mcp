@@ -131,8 +131,13 @@ final class MenuBarController {
         }
         let view = SettingsRoot(
             accountsVM: accountsVM,
-            permissionsVM: permissionsVM
-        ) { [weak self] in self?.wizard.show() }
+            permissionsVM: permissionsVM,
+            statusVM: statusVM,
+            client: client,
+            paths: paths,
+            onAddAccount: { [weak self] in self?.wizard.show() },
+            onRunSetup:   { [weak self] in self?.wizard.show() }
+        )
         let host = NSHostingController(rootView: view)
         let w = NSWindow(contentViewController: host)
         w.title = "MailMCP Settings"

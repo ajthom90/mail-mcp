@@ -5,7 +5,11 @@ import SwiftUI
 public struct SettingsRoot: View {
     let accountsVM: AccountsViewModel
     let permissionsVM: PermissionsViewModel
+    let statusVM: StatusViewModel
+    let client: IpcClient
+    let paths: MailMCPPaths
     let onAddAccount: () -> Void
+    let onRunSetup: () -> Void
 
     public var body: some View {
         TabView {
@@ -13,8 +17,10 @@ public struct SettingsRoot: View {
                 .tabItem { Label("Accounts", systemImage: "person.crop.circle") }
             PermissionsPane(accounts: accountsVM, vm: permissionsVM)
                 .tabItem { Label("Permissions", systemImage: "lock.shield") }
+            GeneralPane(statusVM: statusVM, client: client, paths: paths, onRunSetup: onRunSetup)
+                .tabItem { Label("General", systemImage: "gear") }
         }
-        .frame(minWidth: 560, minHeight: 360)
+        .frame(minWidth: 600, minHeight: 420)
         .padding()
     }
 }
