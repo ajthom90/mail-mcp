@@ -7,6 +7,8 @@
 .idea/
 .vscode/
 *.code-workspace
+# Per-developer Claude Code settings + scheduled-task lockfile.
+.claude/
 
 # Rust (Cargo workspace)
 target/

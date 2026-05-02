@@ -1,0 +1,77 @@
+name: Bug report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please include enough detail to reproduce; bug reports without repro steps are hard to act on.
+
+        For security issues, do **not** file a public issue — see [SECURITY.md](../blob/main/SECURITY.md).
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `mail-mcp-daemon --version`
+      placeholder: "0.1.0 (commit abcdef0)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Windows
+        - Linux
+        - Other (specify in description)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: Install method
+      options:
+        - Tray app (.dmg / .msi / Flatpak / tarball)
+        - Headless / cargo install
+        - Built from source
+        - Other (specify in description)
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Numbered list of actions that trigger the bug.
+      placeholder: |
+        1. Run `mail-mcp-daemon --google-client-id ...`
+        2. In Claude, ask "list my unread emails"
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Relevant excerpt from `~/.local/state/mail-mcp/logs/` (Linux), `~/Library/Logs/mail-mcp/` (macOS), or `%LOCALAPPDATA%\mail-mcp\logs\` (Windows). Redact tokens or email content if present.
+      render: shell
