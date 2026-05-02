@@ -8,11 +8,23 @@ namespace MailMCP.IPC;
 // crates/mail-mcp-core/src/permissions/mod.rs.
 // Field names use snake_case via JsonPropertyName to match serde output.
 
+// JsonStringEnumMemberName landed in .NET 9; we target .NET 8. The C# enum
+// names below all map cleanly to their wire-format counterparts under
+// JsonNamingPolicy.SnakeCaseLower (Ok -> "ok", NeedsReauth -> "needs_reauth",
+// etc.), so a typed converter that delegates to that policy gets us the same
+// behavior without per-member attributes.
+internal sealed class SnakeCaseEnumConverter<TEnum> : JsonStringEnumConverter<TEnum>
+    where TEnum : struct, Enum
+{
+    public SnakeCaseEnumConverter() : base(JsonNamingPolicy.SnakeCaseLower) { }
+}
+
+[JsonConverter(typeof(SnakeCaseEnumConverter<AccountStatus>))]
 public enum AccountStatus
 {
-    [JsonStringEnumMemberName("ok")] Ok,
-    [JsonStringEnumMemberName("needs_reauth")] NeedsReauth,
-    [JsonStringEnumMemberName("network_error")] NetworkError,
+    Ok,
+    NeedsReauth,
+    NetworkError,
 }
 
 public sealed record AccountListItem(
@@ -26,22 +38,24 @@ public sealed record AccountAddOAuthInProgress(
     [property: JsonPropertyName("challenge_id")] string ChallengeId,
     [property: JsonPropertyName("auth_url")] string AuthUrl);
 
+[JsonConverter(typeof(SnakeCaseEnumConverter<Policy>))]
 public enum Policy
 {
-    [JsonStringEnumMemberName("allow")] Allow,
-    [JsonStringEnumMemberName("confirm")] Confirm,
-    [JsonStringEnumMemberName("session")] Session,
-    [JsonStringEnumMemberName("draftify")] Draftify,
-    [JsonStringEnumMemberName("block")] Block,
+    Allow,
+    Confirm,
+    Session,
+    Draftify,
+    Block,
 }
 
+[JsonConverter(typeof(SnakeCaseEnumConverter<Category>))]
 public enum Category
 {
-    [JsonStringEnumMemberName("read")] Read,
-    [JsonStringEnumMemberName("modify")] Modify,
-    [JsonStringEnumMemberName("trash")] Trash,
-    [JsonStringEnumMemberName("draft")] Draft,
-    [JsonStringEnumMemberName("send")] Send,
+    Read,
+    Modify,
+    Trash,
+    Draft,
+    Send,
 }
 
 public sealed record PermissionMap(
