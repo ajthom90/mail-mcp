@@ -1,49 +1,24 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
-    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <RootNamespace>MailMCP</RootNamespace>
     <AssemblyName>MailMCP</AssemblyName>
     <Platforms>x64;arm64</Platforms>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
-    <UseWinUI>true</UseWinUI>
     <UseWindowsForms>true</UseWindowsForms>
-    <!-- UseWindowsForms=true pulls in Microsoft.NET.Sdk.WindowsDesktop which,
-         on .NET 9+ SDKs, defaults UseWPF=true and triggers the WPF XAML
-         compiler (MC6000). We use WinUI XAML, not WPF; force this off. -->
-    <UseWPF>false</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AssemblyVersion>0.1.0.0</AssemblyVersion>
     <FileVersion>0.1.0.0</FileVersion>
     <Version>0.1.0</Version>
-    <!-- WinAppSDK self-contained packaging is configured by Phase C; for now
-         the Debug builds run from the dev tree. -->
-    <SelfContained>false</SelfContained>
-    <PublishSingleFile>false</PublishSingleFile>
-    <!-- Generated XAML 'unused field' warnings on auto-generated InitializeComponent
-         partials trip TreatWarningsAsErrors. Suppress the noisy ones. -->
-    <NoWarn>$(NoWarn);CS8002;CA1416;CS0067</NoWarn>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Floating-point patch versions: Microsoft.WindowsAppSDK occasionally
-         bumps the build-number suffix between when this file is authored
-         and when CI restores; pinning the exact build number causes spurious
-         restore failures. The TreatWarningsAsErrors above also flags
-         NU1603 ("resolved a higher version than requested") so we float to
-         avoid both classes of failure. -->
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.5.*" />
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.*" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.*" />
   </ItemGroup>
-
-  <!-- WPF MarkupCompile target overrides live in Directory.Build.targets so
-       MSBuild imports them AFTER the SDK targets that originally define them.
-       Targets defined in this csproj body run before the SDK targets and get
-       overridden — Directory.Build.targets is the documented "after-SDK" hook. -->
 
   <Target Name="BuildDaemon" BeforeTargets="Build">
     <Exec
