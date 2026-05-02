@@ -1,0 +1,13 @@
+# Meson out-of-tree builds
+build/
+builddir/
+build-*/
+
+# Generated files
+src/config.h
+src/resources/*.gresource
+src/resources/*.gresource.c
+
+# Editor
+.vscode/
+*.swp
