@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    runs-on: macos-14
+    if: ${{ secrets.MACOS_CERT_P12_BASE64 != '' }}
+    env:
+      DEVELOPER_ID_NAME: ${{ secrets.DEVELOPER_ID_NAME }}
+      MAIL_MCP_GOOGLE_CLIENT_ID: ${{ secrets.MAIL_MCP_GOOGLE_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: install xcodegen + create-dmg + mint
+        run: |
+          brew install create-dmg mint
+          mint install yonaskolb/XcodeGen@2.44.0 --silent
+      - name: import signing certificate
+        env:
+          CERT_B64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          CERT_PW: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/build.keychain"
+          security create-keychain -p "" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security default-keychain -s "$KEYCHAIN"
+          security unlock-keychain -p "" "$KEYCHAIN"
+          echo "$CERT_B64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+              -P "$CERT_PW" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN"
+      - name: write Apple API key
+        env:
+          KEY_B64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          echo "$KEY_B64" | base64 --decode > "$RUNNER_TEMP/keys/AuthKey.p8"
+          echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/keys/AuthKey.p8" >> "$GITHUB_ENV"
+          echo "APPLE_API_KEY_ID=${{ secrets.APPLE_API_KEY_ID }}" >> "$GITHUB_ENV"
+          echo "APPLE_API_ISSUER_ID=${{ secrets.APPLE_API_ISSUER_ID }}" >> "$GITHUB_ENV"
+      - name: write Config-Local.xcconfig
+        working-directory: tray-app
+        run: |
+          cat > Config-Local.xcconfig <<EOF
+          MAIL_MCP_GOOGLE_CLIENT_ID = ${{ secrets.MAIL_MCP_GOOGLE_CLIENT_ID }}
+          CODE_SIGN_IDENTITY = $DEVELOPER_ID_NAME
+          DEVELOPMENT_TEAM = ${{ secrets.DEVELOPER_TEAM_ID }}
+          EOF
+      - name: xcodegen
+        working-directory: tray-app
+        run: mint run yonaskolb/XcodeGen@2.44.0 generate
+      - name: archive + export
+        working-directory: tray-app
+        run: |
+          xcodebuild archive \
+              -scheme MailMCP \
+              -configuration Release \
+              -archivePath build/MailMCP.xcarchive \
+              CODE_SIGN_STYLE=Manual \
+              CODE_SIGN_IDENTITY="$DEVELOPER_ID_NAME"
+          xcodebuild -exportArchive \
+              -archivePath build/MailMCP.xcarchive \
+              -exportPath build/export \
+              -exportOptionsPlist BuildScripts/exportOptions.plist
+      - name: notarize
+        working-directory: tray-app
+        run: BuildScripts/notarize.sh build/export/MailMCP.app
+      - name: build DMG
+        working-directory: tray-app
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          BuildScripts/build-dmg.sh build/export/MailMCP.app build/MailMCP-$VERSION.dmg "$VERSION"
+      - name: sign appcast
+        working-directory: tray-app
+        env:
+          ED_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          # Sparkle's sign_update tool — ships in Sparkle.framework's binaries.
+          # SPM build pulls it into DerivedData; locate it.
+          SIGN_TOOL="$(find ~/Library/Developer/Xcode/DerivedData -name sign_update -type f -perm -u+x | head -n 1)"
+          echo "$ED_KEY" | "$SIGN_TOOL" -s build/MailMCP-*.dmg > build/signature.txt
+      - name: upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: tray-app/build/MailMCP-*.dmg
+          generate_release_notes: true
