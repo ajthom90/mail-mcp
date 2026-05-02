@@ -11,6 +11,11 @@ on:
         required: false
         default: "dev"
 
+# softprops/action-gh-release needs to create / update GitHub Releases on
+# tag pushes, which requires `contents: write` on the workflow's GITHUB_TOKEN.
+permissions:
+  contents: write
+
 jobs:
   release:
     runs-on: macos-15
