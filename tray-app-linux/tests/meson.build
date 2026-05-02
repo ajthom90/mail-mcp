@@ -22,3 +22,11 @@ test_notifications = executable('test_notifications',
   include_directories: src_inc,
 )
 test('notifications', test_notifications)
+
+test_ipc_client = executable('test_ipc_client',
+  'test_ipc_client.c', 'mock_uds_server.c',
+  '../src/ipc/ipc_client.c',
+  dependencies: [cmocka_dep, gio_dep, gio_unix_dep, jsonglib_dep],
+  include_directories: src_inc,
+)
+test('ipc_client', test_ipc_client, timeout: 30)
