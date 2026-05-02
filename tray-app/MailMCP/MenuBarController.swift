@@ -16,6 +16,7 @@ final class MenuBarController {
     private var observation: AnyCancellable?
     private lazy var wizard = WizardController(client: client)
     private lazy var accountsVM = AccountsViewModel(client: client)
+    private lazy var permissionsVM = PermissionsViewModel(client: client)
     private lazy var approvals = ApprovalCoordinator(client: client)
     private var settingsWindow: NSWindow?
 
@@ -128,9 +129,10 @@ final class MenuBarController {
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        let view = SettingsRoot(accountsVM: accountsVM) { [weak self] in
-            self?.wizard.show()
-        }
+        let view = SettingsRoot(
+            accountsVM: accountsVM,
+            permissionsVM: permissionsVM
+        ) { [weak self] in self?.wizard.show() }
         let host = NSHostingController(rootView: view)
         let w = NSWindow(contentViewController: host)
         w.title = "MailMCP Settings"

@@ -4,14 +4,17 @@ import SwiftUI
 /// adds Permissions, General, About.
 public struct SettingsRoot: View {
     let accountsVM: AccountsViewModel
+    let permissionsVM: PermissionsViewModel
     let onAddAccount: () -> Void
 
     public var body: some View {
         TabView {
             AccountsPane(vm: accountsVM, onAddAccount: onAddAccount)
                 .tabItem { Label("Accounts", systemImage: "person.crop.circle") }
-                .frame(minWidth: 480, minHeight: 300)
+            PermissionsPane(accounts: accountsVM, vm: permissionsVM)
+                .tabItem { Label("Permissions", systemImage: "lock.shield") }
         }
+        .frame(minWidth: 560, minHeight: 360)
         .padding()
     }
 }
