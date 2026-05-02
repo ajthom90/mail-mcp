@@ -138,7 +138,7 @@ jobs:
       - name: cargo check --workspace --target ${{ matrix.target }}
         run: cargo check --workspace --target ${{ matrix.target }}
 
-  # Builds + tests the .NET 8 / WinUI 3 tray app on a Windows runner. The
+  # Builds + tests the .NET 8 / WinForms tray app on a Windows runner. The
   # csproj has a BuildDaemon target that invokes cargo for the daemon binary,
   # so this job exercises the cargo→.NET integration end-to-end.
   windows-tray:
@@ -173,3 +173,34 @@ jobs:
       - name: dotnet test
         working-directory: tray-app-win
         run: dotnet test MailMCP.Tests/MailMCP.Tests.csproj -c Debug -p:Platform=${{ matrix.platform }} --no-build --logger "console;verbosity=normal"
+
+  linux-tray:
+    name: Linux tray
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: install GTK4 + libadwaita + cmocka deps
+        run: |
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then break; fi
+            sleep 10
+          done
+          sudo apt-get install -y \
+            meson ninja-build gcc pkg-config \
+            libgtk-4-dev libadwaita-1-dev \
+            libayatana-appindicator3-dev libjson-glib-dev \
+            libcmocka-dev libdbus-1-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-tray
+      - name: meson setup
+        # Phase A doesn't bundle the daemon yet; -Dinstall_daemon=false skips
+        # the cargo custom_target so this job exercises only the C tray + tests.
+        # Once Tasks 8-13 land + the daemon is wired into release builds, flip
+        # to install_daemon=true.
+        run: meson setup tray-app-linux/build tray-app-linux -Dinstall_daemon=false
+      - name: meson compile
+        run: meson compile -C tray-app-linux/build
+      - name: meson test
+        run: meson test -C tray-app-linux/build --print-errorlogs
