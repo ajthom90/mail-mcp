@@ -1,0 +1,18 @@
+<Project>
+  <!--
+    UseWindowsForms=true pulls in the WindowsDesktop SDK chain, which imports
+    Microsoft.WinFX.targets. Its MarkupCompilePass1 target tries to compile
+    App.xaml as WPF and fails with MC6000 because we don't reference
+    PresentationCore/PresentationFramework. We're a WinUI 3 app: XAML
+    compilation runs via C# source generators in Microsoft.WindowsAppSDK, not
+    the WPF MarkupCompile pipeline.
+
+    Directory.Build.targets is auto-imported by MSBuild AFTER all SDK targets,
+    so target overrides defined here win against the SDK-imported originals.
+    The same overrides placed inline in the csproj body are imported BEFORE
+    the SDK targets and get clobbered.
+  -->
+  <Target Name="MarkupCompilePass1" />
+  <Target Name="MarkupCompilePass2" />
+  <Target Name="MarkupCompileClean" />
+</Project>
