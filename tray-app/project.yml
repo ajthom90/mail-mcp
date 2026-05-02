@@ -21,6 +21,10 @@ settings:
 configFiles:
   Debug: Config-Default.xcconfig
   Release: Config-Default.xcconfig
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.6.0
 targets:
   MailMCP:
     type: application
@@ -29,6 +33,8 @@ targets:
       - path: MailMCP
     resources:
       - path: MailMCP/Resources/Assets.xcassets
+    dependencies:
+      - package: Sparkle
     info:
       path: MailMCP/Resources/Info.plist
       properties:
@@ -41,6 +47,9 @@ targets:
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
         NSHumanReadableCopyright: "© 2026"
         MAIL_MCP_GOOGLE_CLIENT_ID: $(MAIL_MCP_GOOGLE_CLIENT_ID)
+        SUFeedURL: "https://ajthom90.github.io/mail-mcp/appcast.xml"
+        SUEnableAutomaticChecks: true
+        SUPublicEDKey: "$(SUPublicEDKey)"
     preBuildScripts:
       - name: Build daemon (cargo)
         script: |

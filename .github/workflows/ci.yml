@@ -43,16 +43,6 @@ jobs:
         # macOS, gnome-keyring/kwallet on Linux). Linux runners don't have one.
         # `keychain-tests` is for manual local verification.
         run: cargo test --workspace
-      - name: install xcodegen via mint (macOS only)
-        if: runner.os == 'macOS'
-        # Both `brew install xcodegen` (2.45.4) and the pre-built 2.44.0 zip
-        # segfault on the macos-14 runner — likely a Swift-runtime mismatch
-        # in the prebuilt binaries. Mint compiles from source against the
-        # runner's own Swift, which works.
-        run: |
-          brew install mint
-          mint install yonaskolb/XcodeGen@2.44.0 --silent
-          mint run yonaskolb/XcodeGen@2.44.0 --version
       - name: write stub Config-Local.xcconfig (macOS only)
         if: runner.os == 'macOS'
         working-directory: tray-app
@@ -62,10 +52,9 @@ jobs:
           # client_id at compile time — only the daemon at runtime does. CI just
           # needs the build setting to be defined.
           printf 'MAIL_MCP_GOOGLE_CLIENT_ID = ci-dummy.apps.googleusercontent.com\n' >> Config-Local.xcconfig
-      - name: xcodegen generate (macOS only)
-        if: runner.os == 'macOS'
-        working-directory: tray-app
-        run: mint run yonaskolb/XcodeGen@2.44.0 generate
+      # Note: MailMCP.xcodeproj is checked in (xcodegen prebuilts crash on the
+      # macos-14 runner; project.yml is still the source of truth — devs run
+      # `xcodegen generate` locally when project.yml changes).
       - name: xcodebuild test (macOS only)
         if: runner.os == 'macOS'
         working-directory: tray-app

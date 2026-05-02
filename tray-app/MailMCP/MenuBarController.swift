@@ -18,6 +18,7 @@ final class MenuBarController {
     private lazy var accountsVM = AccountsViewModel(client: client)
     private lazy var permissionsVM = PermissionsViewModel(client: client)
     private lazy var approvals = ApprovalCoordinator(client: client)
+    private lazy var updater = Updater()
     private var settingsWindow: NSWindow?
 
     init(paths: MailMCPPaths = .defaultForUser()) {
@@ -113,6 +114,13 @@ final class MenuBarController {
         setup.target = self
         menu.addItem(setup)
         menu.addItem(NSMenuItem.separator())
+        let upd = NSMenuItem(
+            title: "Check for Updates…",
+            action: #selector(checkForUpdates),
+            keyEquivalent: ""
+        )
+        upd.target = self
+        menu.addItem(upd)
         menu.addItem(NSMenuItem(
             title: "Quit MailMCP",
             action: #selector(NSApplication.terminate(_:)),
@@ -122,6 +130,8 @@ final class MenuBarController {
     }
 
     @objc private func openWizard() { wizard.show() }
+
+    @objc private func checkForUpdates() { updater.checkForUpdates() }
 
     @objc private func openSettings() {
         if let w = settingsWindow {

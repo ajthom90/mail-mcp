@@ -47,7 +47,6 @@ endpoint.json
 state.db
 
 # tray-app build artifacts (handled in tray-app/.gitignore)
-tray-app/MailMCP.xcodeproj/
 tray-app/Config-Local.xcconfig
 tray-app/build/
 tray-app/DerivedData/

@@ -10,5 +10,11 @@
 
 MAIL_MCP_GOOGLE_CLIENT_ID = your-client-id.apps.googleusercontent.com
 
+// Sparkle EdDSA public key. Generate with Sparkle's `generate_keys` tool the
+// first time you set up signing (it writes the private key to your Keychain).
+// Until you generate one, leave this as a placeholder — Sparkle will refuse
+// to validate updates, which is fine for unsigned dev builds.
+SUPublicEDKey = REPLACE_WITH_GENERATED_PUBLIC_KEY
+
 // Always include the local override last so it wins.
 #include? "Config-Local.xcconfig"
