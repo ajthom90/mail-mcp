@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Windows.Forms;
+using MailMCP.Approvals;
 using MailMCP.IPC;
 using MailMCP.ViewModels;
 
@@ -17,6 +18,8 @@ public sealed class TrayController : IAsyncDisposable
     private readonly DaemonLauncher _launcher;
     private readonly IpcClient _client;
     private readonly StatusViewModel _statusVM;
+    private readonly AccountsViewModel _accountsVM;
+    private readonly ApprovalCoordinator _approvals;
     private NotifyIcon? _icon;
     private ContextMenuStrip? _menu;
     private ToolStripMenuItem? _statusItem;
@@ -29,7 +32,13 @@ public sealed class TrayController : IAsyncDisposable
         _client = new IpcClient(_paths.IpcPipe);
         _statusVM = new StatusViewModel(_client);
         _statusVM.PropertyChanged += OnStatusPropertyChanged;
+        _accountsVM = new AccountsViewModel(_client);
+        _approvals = new ApprovalCoordinator(_client);
     }
+
+    /// <summary>Exposed for the Settings window so it can bind to the same VM.</summary>
+    public AccountsViewModel AccountsVM => _accountsVM;
+    public StatusViewModel StatusVM => _statusVM;
 
     public void Start()
     {
@@ -52,6 +61,8 @@ public sealed class TrayController : IAsyncDisposable
             await _launcher.EnsureRunningAsync().ConfigureAwait(false);
             await _client.ConnectAsync().ConfigureAwait(false);
             _statusVM.Start();
+            _accountsVM.Start();
+            _approvals.Start();
         }
         catch (Exception ex)
         {
@@ -142,6 +153,8 @@ public sealed class TrayController : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        await _approvals.DisposeAsync().ConfigureAwait(false);
+        await _accountsVM.StopAsync().ConfigureAwait(false);
         await _statusVM.StopAsync().ConfigureAwait(false);
         await _client.DisposeAsync().ConfigureAwait(false);
         _icon?.Dispose();
