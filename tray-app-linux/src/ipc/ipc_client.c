@@ -102,7 +102,7 @@ gboolean mailmcp_ipc_client_connect(MailMcpIpcClient *c, GError **err)
 
     c->socket = g_object_ref(sock);
     c->read_source = g_socket_create_source(c->socket, G_IO_IN | G_IO_HUP | G_IO_ERR, NULL);
-    g_source_set_callback(c->read_source, (GSourceFunc)on_socket_readable, c, NULL);
+    g_source_set_callback(c->read_source, G_SOURCE_FUNC(on_socket_readable), c, NULL);
     g_source_attach(c->read_source, g_main_context_get_thread_default());
     return TRUE;
 }

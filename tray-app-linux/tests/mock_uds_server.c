@@ -94,7 +94,7 @@ static gboolean on_listen_readable(GSocket *socket, GIOCondition cond, gpointer 
     g_mutex_unlock(&m->mu);
 
     GSource *src = g_socket_create_source(cli, G_IO_IN | G_IO_HUP | G_IO_ERR, NULL);
-    g_source_set_callback(src, (GSourceFunc)on_client_readable, m, NULL);
+    g_source_set_callback(src, G_SOURCE_FUNC(on_client_readable), m, NULL);
     g_source_attach(src, m->ctx);
     g_source_unref(src);
     return G_SOURCE_CONTINUE;
@@ -138,7 +138,7 @@ MailMcpMockUds *mailmcp_mock_uds_new(void)
     g_socket_listen(m->listen_sock, NULL);
 
     GSource *src = g_socket_create_source(m->listen_sock, G_IO_IN, NULL);
-    g_source_set_callback(src, (GSourceFunc)on_listen_readable, m, NULL);
+    g_source_set_callback(src, G_SOURCE_FUNC(on_listen_readable), m, NULL);
     g_source_attach(src, m->ctx);
     g_source_unref(src);
 
