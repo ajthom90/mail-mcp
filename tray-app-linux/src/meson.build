@@ -4,6 +4,7 @@ sources = files(
   'ipc/models.c',
   'ipc/notifications.c',
   'ipc/ipc_client.c',
+  'daemon_launcher.c',
 )
 
 executable('mail-mcp-tray',
