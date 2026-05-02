@@ -8,8 +8,15 @@ internal static class Program
     private static void Main()
     {
         ApplicationConfiguration.Initialize();
-        using var tray = new TrayController();
-        tray.Start();
-        Application.Run();
+        var tray = new TrayController();
+        try
+        {
+            tray.Start();
+            Application.Run();
+        }
+        finally
+        {
+            tray.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
     }
 }
