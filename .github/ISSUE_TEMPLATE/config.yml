@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ajthom90/mail-mcp/security/advisories/new
+    about: Report a vulnerability privately. Do NOT open a public issue for security issues.
+  - name: Question / discussion
+    url: https://github.com/ajthom90/mail-mcp/discussions
+    about: For usage questions or open-ended discussion, use GitHub Discussions.
