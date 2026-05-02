@@ -1,0 +1,6 @@
+option('google_client_id', type: 'string', value: '',
+  description: 'Google OAuth client ID baked into the binary at build time. Empty = require env var at runtime.')
+option('install_daemon', type: 'boolean', value: true,
+  description: 'Build and install the mail-mcp-daemon Rust binary alongside the tray.')
+option('tests', type: 'boolean', value: true,
+  description: 'Build the CMocka test suite.')
