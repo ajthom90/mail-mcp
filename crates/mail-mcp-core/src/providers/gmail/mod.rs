@@ -9,5 +9,5 @@ mod provider;
 mod trash;
 mod triage;
 
-pub use client::AuthClient;
+pub use client::{AuthClient, RefreshRotationCallback};
 pub use provider::GmailProvider;

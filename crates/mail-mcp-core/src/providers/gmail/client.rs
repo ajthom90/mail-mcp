@@ -87,38 +87,146 @@ mod tests {
         assert!(resp.status().is_success());
         assert_eq!(client.access_token().await, "AT-NEW");
     }
+
+    #[tokio::test]
+    async fn rotation_callback_fires_when_refresh_token_changes() {
+        // Issue #2: when Google rotates the refresh token during a refresh,
+        // the new value must be surfaced to the daemon so it can be persisted
+        // to the keychain. Otherwise on next startup we'd reload the stale
+        // token from disk and get an irrecoverable auth failure.
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "access_token": "AT-NEW",
+                "refresh_token": "RT-2",
+                "expires_in": 3600,
+                "token_type": "Bearer"
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/probe"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+            .mount(&server)
+            .await;
+
+        let captured: Arc<std::sync::Mutex<Option<String>>> = Arc::new(std::sync::Mutex::new(None));
+        let captured_for_cb = captured.clone();
+        let cb: RefreshRotationCallback = Arc::new(move |new_rt: &str| {
+            *captured_for_cb.lock().unwrap() = Some(new_rt.to_string());
+        });
+
+        let cfg = cfg(format!("{}/token", server.uri()));
+        let client = AuthClient::with_rotation_callback(
+            reqwest::Client::new(),
+            cfg,
+            expired_tokens(),
+            Some(cb),
+        );
+
+        let _ = client
+            .get(&format!("{}/probe", server.uri()))
+            .await
+            .unwrap();
+        // The rotation callback fired with the new refresh token.
+        assert_eq!(
+            captured.lock().unwrap().as_deref(),
+            Some("RT-2"),
+            "rotation callback should have fired with the new refresh token"
+        );
+    }
+
+    #[tokio::test]
+    async fn rotation_callback_does_not_fire_when_token_unchanged() {
+        // Google's typical behavior: returns the SAME refresh_token on each
+        // refresh. The callback should NOT fire — there's nothing to persist.
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "access_token": "AT-NEW",
+                "refresh_token": "RT-1",          // same as before
+                "expires_in": 3600,
+                "token_type": "Bearer"
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/probe"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+            .mount(&server)
+            .await;
+
+        let fired = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let fired_for_cb = fired.clone();
+        let cb: RefreshRotationCallback = Arc::new(move |_| {
+            fired_for_cb.store(true, std::sync::atomic::Ordering::Relaxed);
+        });
+
+        let cfg = cfg(format!("{}/token", server.uri()));
+        let client = AuthClient::with_rotation_callback(
+            reqwest::Client::new(),
+            cfg,
+            expired_tokens(),
+            Some(cb),
+        );
+        let _ = client
+            .get(&format!("{}/probe", server.uri()))
+            .await
+            .unwrap();
+        assert!(
+            !fired.load(std::sync::atomic::Ordering::Relaxed),
+            "rotation callback should NOT fire when refresh_token is unchanged"
+        );
+    }
 }
 
 /// Auth-aware HTTP client for a single account. Wraps a `reqwest::Client` and the
 /// most-recent `OAuthTokens`. Refreshes the access token automatically before expiry
-/// (and on 401 responses, via `with_refresh_on_401`).
+/// and on 401 responses (see `send`'s retry path). When the provider rotates the
+/// refresh token during a refresh, fires `on_rotation` so the daemon can persist
+/// the new token to the keychain.
 #[derive(Clone)]
 pub struct AuthClient {
     http: reqwest::Client,
     cfg: ProviderConfig,
     tokens: Arc<Mutex<OAuthTokens>>,
+    on_rotation: Option<RefreshRotationCallback>,
 }
+
+/// Callback invoked synchronously by `AuthClient::ensure_fresh` whenever the
+/// provider rotates the refresh token (i.e., the new refresh_token differs
+/// from the one we used to perform the refresh). The daemon hands in a closure
+/// that persists the new token to the OS keychain. The callback receives the
+/// new refresh_token bytes — it must not block for long, since it runs while
+/// the AuthClient holds its tokens lock.
+pub type RefreshRotationCallback = Arc<dyn Fn(&str) + Send + Sync>;
 
 impl AuthClient {
     pub fn new(http: reqwest::Client, cfg: ProviderConfig, tokens: OAuthTokens) -> Self {
+        Self::with_rotation_callback(http, cfg, tokens, None)
+    }
+
+    /// Same as `new`, but registers `on_rotation` to fire whenever the provider
+    /// hands back a different refresh_token during a refresh — closes the v0.1a
+    /// gap where rotated tokens were updated in memory but never persisted.
+    pub fn with_rotation_callback(
+        http: reqwest::Client,
+        cfg: ProviderConfig,
+        tokens: OAuthTokens,
+        on_rotation: Option<RefreshRotationCallback>,
+    ) -> Self {
         Self {
             http,
             cfg,
             tokens: Arc::new(Mutex::new(tokens)),
+            on_rotation,
         }
     }
 
     pub async fn access_token(&self) -> String {
         self.tokens.lock().await.access_token.clone()
-    }
-
-    /// Returns Some(new_refresh_token) if the provider rotated it during the most recent
-    /// refresh, so the daemon can persist it to the keychain. Resets to None after read.
-    pub async fn take_rotated_refresh(&self) -> Option<String> {
-        let mut g = self.tokens.lock().await;
-        // Heuristic: if refresh_token differs from what we started with, surface it once.
-        // The daemon polls this after each call.
-        g.refresh_token.take()
     }
 
     async fn ensure_fresh(&self) -> Result<()> {
@@ -129,21 +237,34 @@ impl AuthClient {
         if !needs_refresh {
             return Ok(());
         }
-        let refresh_token = {
+        let old_refresh_token = {
             let g = self.tokens.lock().await;
             g.refresh_token
                 .clone()
                 .ok_or_else(|| Error::OAuth("no refresh token available".into()))?
         };
-        let new = oauth::refresh(&self.http, &self.cfg, &refresh_token).await?;
-        let mut g = self.tokens.lock().await;
-        g.access_token = new.access_token;
-        g.expires_at = new.expires_at;
-        if new.refresh_token.is_some() {
-            g.refresh_token = new.refresh_token;
+        let new = oauth::refresh(&self.http, &self.cfg, &old_refresh_token).await?;
+        let rotated = new.refresh_token.as_deref().map(str::to_owned);
+        {
+            let mut g = self.tokens.lock().await;
+            g.access_token = new.access_token;
+            g.expires_at = new.expires_at;
+            if let Some(rt) = &rotated {
+                g.refresh_token = Some(rt.clone());
+            }
         }
-        // Note: rotated refresh tokens (Google rarely rotates) — caller should persist on next
-        // observation via `take_rotated_refresh`. For v0.1a Google practice means this is rare.
+        // If the provider rotated the refresh token (Google does this rarely,
+        // but the protocol allows it any time), notify the registered
+        // persistence callback. Compare against the token we used for THIS
+        // refresh, not the construction-time original — that way every
+        // rotation gets a callback, even after several rotations.
+        if let Some(new_rt) = rotated {
+            if new_rt != old_refresh_token {
+                if let Some(cb) = &self.on_rotation {
+                    cb(&new_rt);
+                }
+            }
+        }
         Ok(())
     }
 
