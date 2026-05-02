@@ -222,8 +222,15 @@ impl DaemonHandler {
             return Err(CoreError::OAuth("Google did not return a refresh_token; ensure prompt=consent + access_type=offline".into()));
         }
 
-        // Build provider and register.
-        let auth_client = AuthClient::new(self.http.clone(), self.oauth_cfg.clone(), tokens);
+        // Build provider and register. Hand AuthClient a rotation callback so
+        // that if Google ever rotates the refresh token, the new value is
+        // persisted to the keychain immediately — closes #2.
+        let auth_client = AuthClient::with_rotation_callback(
+            self.http.clone(),
+            self.oauth_cfg.clone(),
+            tokens,
+            Some(make_rotation_callback(self.secrets, id)),
+        );
         let provider = Arc::new(GmailProvider::new(auth_client, email.clone()));
         self.providers.insert(id, provider).await;
 
@@ -343,9 +350,32 @@ pub async fn hydrate_providers(
             expires_at: chrono::Utc::now() - chrono::Duration::seconds(1),
             scope: None,
         };
-        let auth = AuthClient::new(http.clone(), cfg.clone(), tokens);
+        let auth = AuthClient::with_rotation_callback(
+            http.clone(),
+            cfg.clone(),
+            tokens,
+            Some(make_rotation_callback(*secrets, acc.id)),
+        );
         let provider = Arc::new(GmailProvider::new(auth, acc.email.clone()));
         registry.insert(acc.id, provider).await;
     }
     Ok(())
+}
+
+/// Build a callback that persists a rotated Gmail refresh token to the
+/// per-account keychain entry. Logs (non-fatal) if the keychain write fails —
+/// the in-memory token is still good for the rest of the process lifetime.
+fn make_rotation_callback(
+    secrets: SecretStore,
+    account_id: AccountId,
+) -> mail_mcp_core::providers::gmail::RefreshRotationCallback {
+    Arc::new(move |new_rt: &str| {
+        if let Err(e) = secrets.set(account_id, KeyKind::RefreshToken, new_rt) {
+            tracing::warn!(
+                ?e,
+                ?account_id,
+                "failed to persist rotated refresh token to keychain"
+            );
+        }
+    })
 }

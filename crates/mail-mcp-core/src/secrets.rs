@@ -27,8 +27,10 @@ pub fn service_name(id: AccountId) -> String {
     format!("mail-mcp.{id}")
 }
 
-/// Cross-platform OS keychain access. Cheap to construct; not Send-bound, not Clone.
-#[derive(Default)]
+/// Cross-platform OS keychain access. Zero-sized; cheap to clone-by-copy so
+/// callbacks (e.g., the AuthClient refresh-rotation persistence hook) can
+/// hold an owned copy.
+#[derive(Default, Clone, Copy)]
 pub struct SecretStore;
 
 impl SecretStore {
