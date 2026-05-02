@@ -13,7 +13,7 @@ struct MailMCPApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var menuBar: MenuBarController?
+    var menuBar: MenuBarController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Don't show in Dock or app switcher.

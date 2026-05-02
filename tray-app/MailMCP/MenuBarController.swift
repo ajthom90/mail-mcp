@@ -15,6 +15,8 @@ final class MenuBarController {
     private var refreshTimer: Timer?
     private var observation: AnyCancellable?
     private lazy var wizard = WizardController(client: client)
+    private lazy var accountsVM = AccountsViewModel(client: client)
+    private var settingsWindow: NSWindow?
 
     init(paths: MailMCPPaths = .defaultForUser()) {
         self.paths = paths
@@ -35,6 +37,7 @@ final class MenuBarController {
             do {
                 try await launcher.ensureRunning()
                 statusVM.start()
+                accountsVM.start()
                 await maybeOpenWizard()
                 // Repaint the menu every time the VM's `status` changes.
                 withObservationTracking {
@@ -90,6 +93,15 @@ final class MenuBarController {
         pauseItem.target = self
         menu.addItem(pauseItem)
 
+        let settings = NSMenuItem(
+            title: "Open Settings…",
+            action: #selector(openSettings),
+            keyEquivalent: ","
+        )
+        settings.target = self
+        menu.addItem(settings)
+        menu.addItem(NSMenuItem.separator())
+
         let setup = NSMenuItem(
             title: "Run Setup Again…",
             action: #selector(openWizard),
@@ -107,6 +119,26 @@ final class MenuBarController {
     }
 
     @objc private func openWizard() { wizard.show() }
+
+    @objc private func openSettings() {
+        if let w = settingsWindow {
+            w.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let view = SettingsRoot(accountsVM: accountsVM) { [weak self] in
+            self?.wizard.show()
+        }
+        let host = NSHostingController(rootView: view)
+        let w = NSWindow(contentViewController: host)
+        w.title = "MailMCP Settings"
+        w.styleMask = [.titled, .closable, .resizable]
+        w.setContentSize(NSSize(width: 560, height: 360))
+        w.center()
+        settingsWindow = w
+        w.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
 
     @objc private func togglePause() {
         let newPaused = !(statusVM.status?.mcpPaused ?? false)
