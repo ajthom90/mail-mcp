@@ -92,7 +92,8 @@ internal sealed class MockIpcServer : IAsyncDisposable
 
     private static string? DefaultFor(string method, long? id) => method switch
     {
-        "subscribe" => $$"""{"jsonrpc":"2.0","id":{{(id ?? 0)}},"result":{"subscribed":[]}}""",
+        "subscribe" => "{\"jsonrpc\":\"2.0\",\"id\":" + (id ?? 0)
+                     + ",\"result\":{\"subscribed\":[]}}",
         _ => null,
     };
 
