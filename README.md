@@ -20,3 +20,13 @@ open MailMCP.xcodeproj
 
 The first launch shows a wizard. Sign in to Gmail; the menu-bar icon appears.
 Add the snippet from the wizard's last step to your Claude Desktop config.
+
+## Install (end users)
+
+Download the latest signed DMG from the [releases page](https://github.com/ajthom90/mail-mcp/releases), open it, and drag MailMCP into Applications. First launch:
+
+1. Right-click MailMCP.app → Open (Apple's first-launch security check).
+2. Follow the wizard to connect a Gmail account.
+3. Add the snippet from the wizard's last step to your Claude Desktop config.
+
+Updates are delivered via Sparkle when you choose "Check for Updates…" from the menu, or automatically in the background.
