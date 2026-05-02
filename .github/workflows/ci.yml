@@ -70,3 +70,16 @@ jobs:
             -only-testing:MailMCPTests \
             CODE_SIGNING_ALLOWED=NO \
             -quiet
+      - name: xcodebuild UI test (macOS only)
+        if: runner.os == 'macOS'
+        working-directory: tray-app
+        # Note: this UI test launches the app in a tempdir. The daemon needs a
+        # MAIL_MCP_GOOGLE_CLIENT_ID at runtime, but the wizard's "Skip Setup"
+        # path doesn't actually call OAuth so a stub client_id is fine.
+        run: |
+          xcodebuild test \
+            -scheme MailMCP \
+            -destination "platform=macOS" \
+            -only-testing:MailMCPUITests/WizardSmokeTests \
+            CODE_SIGNING_ALLOWED=NO \
+            -quiet
