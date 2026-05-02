@@ -45,3 +45,8 @@ apps/linux/src/ipc_types.generated.c
 .env.local
 endpoint.json
 state.db
+
+# tray-app build artifacts (handled in tray-app/.gitignore)
+tray-app/Config-Local.xcconfig
+tray-app/build/
+tray-app/DerivedData/

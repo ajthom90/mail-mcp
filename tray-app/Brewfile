@@ -1,0 +1,4 @@
+# Tools needed to develop the macOS tray app.
+# Run from tray-app/: `brew bundle install`
+brew "xcodegen"     # generates MailMCP.xcodeproj from project.yml
+brew "create-dmg"   # builds release DMG in CI (and locally for dry-runs)

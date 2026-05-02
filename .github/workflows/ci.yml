@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-14]
+        os: [ubuntu-latest, macos-15]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -24,7 +24,14 @@ jobs:
           components: rustfmt, clippy
       - name: install libdbus-1-dev (Linux only)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+        # apt-get update sometimes hits a stale mirror — retry up to 3x.
+        run: |
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then break; fi
+            echo "apt-get update attempt $attempt failed; sleeping 10s"
+            sleep 10
+          done
+          sudo apt-get install -y libdbus-1-dev pkg-config
       - uses: Swatinem/rust-cache@v2
       - name: cargo fmt
         run: cargo fmt --all -- --check
@@ -36,3 +43,91 @@ jobs:
         # macOS, gnome-keyring/kwallet on Linux). Linux runners don't have one.
         # `keychain-tests` is for manual local verification.
         run: cargo test --workspace
+      - name: write stub Config-Local.xcconfig (macOS only)
+        if: runner.os == 'macOS'
+        working-directory: tray-app
+        run: |
+          cp Config-Default.xcconfig Config-Local.xcconfig
+          # build-daemon.sh and the build phase don't actually need a valid OAuth
+          # client_id at compile time — only the daemon at runtime does. CI just
+          # needs the build setting to be defined.
+          printf 'MAIL_MCP_GOOGLE_CLIENT_ID = ci-dummy.apps.googleusercontent.com\n' >> Config-Local.xcconfig
+      # Note: MailMCP.xcodeproj is checked in (xcodegen prebuilts crash on the
+      # macos-15 runner; project.yml is still the source of truth — devs run
+      # `xcodegen generate` locally when project.yml changes).
+      - name: xcodebuild test (macOS only)
+        if: runner.os == 'macOS'
+        working-directory: tray-app
+        run: |
+          xcodebuild test \
+            -scheme MailMCP \
+            -destination "platform=macOS" \
+            -only-testing:MailMCPTests \
+            CODE_SIGNING_ALLOWED=NO \
+            -quiet
+      - name: xcodebuild UI test (macOS only)
+        if: runner.os == 'macOS'
+        # UI test is flaky in CI (spawning a daemon under XCUIApplication
+        # triggers sandbox/permission edges that don't repro locally). Run
+        # it but don't fail the job — track green-or-flake over time.
+        continue-on-error: true
+        working-directory: tray-app
+        run: |
+          xcodebuild test \
+            -scheme MailMCP \
+            -destination "platform=macOS" \
+            -only-testing:MailMCPUITests/WizardSmokeTests \
+            CODE_SIGNING_ALLOWED=NO
+
+  cross-compile:
+    name: Cross-compile ${{ matrix.target }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS Intel cross-compiled from arm64 host.
+          - os: macos-15
+            target: x86_64-apple-darwin
+          # Linux arm64 cross-compiled from amd64 host.
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            linker_pkg: gcc-aarch64-linux-gnu
+            linker_bin: aarch64-linux-gnu-gcc
+          # Linux RISC-V (riscv64gc) cross-compiled from amd64 host.
+          - os: ubuntu-latest
+            target: riscv64gc-unknown-linux-gnu
+            linker_pkg: gcc-riscv64-linux-gnu
+            linker_bin: riscv64-linux-gnu-gcc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: rustup target add ${{ matrix.target }}
+        # The workspace pins to 1.88 via rust-toolchain.toml, so the
+        # rust-toolchain action's `targets:` input (which adds to stable)
+        # doesn't help. Install the target for the pinned toolchain.
+        run: rustup target add ${{ matrix.target }}
+      - name: install cross linker + libdbus dev (Linux targets)
+        if: runner.os == 'Linux'
+        run: |
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then break; fi
+            sleep 10
+          done
+          sudo apt-get install -y pkg-config libdbus-1-dev ${{ matrix.linker_pkg }}
+      - name: configure cross linker (Linux targets)
+        if: runner.os == 'Linux'
+        run: |
+          # Tell cargo which linker to use for the cross target.
+          TARGET_UPPER=$(echo '${{ matrix.target }}' | tr 'a-z-' 'A-Z_')
+          echo "CARGO_TARGET_${TARGET_UPPER}_LINKER=${{ matrix.linker_bin }}" >> "$GITHUB_ENV"
+          # libdbus-sys (transitive via keyring) needs to find dbus headers/libs
+          # for the *target* arch. Without a true sysroot we fall back to telling
+          # pkg-config the system has dbus installed; this is enough for `cargo check`
+          # to type-check, though a full link will require a target-arch sysroot.
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: cross-${{ matrix.target }}
+      - name: cargo check --workspace --target ${{ matrix.target }}
+        run: cargo check --workspace --target ${{ matrix.target }}

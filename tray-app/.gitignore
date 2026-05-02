@@ -1,0 +1,15 @@
+# Xcode (per-user state inside the .xcodeproj — but the .xcodeproj itself
+# is checked in because xcodegen 2.44/2.45 prebuilt binaries segfault on
+# the macos-14 GitHub runner. project.yml is still the source of truth;
+# regenerate locally with `xcodegen generate` when project.yml changes).
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+
+# Local config (per-developer Google OAuth client_id)
+Config-Local.xcconfig
+
+# Notarization artifacts
+*.zip
+*.dmg
