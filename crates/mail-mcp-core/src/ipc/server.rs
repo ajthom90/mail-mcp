@@ -11,10 +11,10 @@ use tokio::sync::broadcast;
 
 #[cfg(test)]
 mod tests {
+    use super::super::transport::IpcStream;
     use super::*;
     use std::path::PathBuf;
     use tokio::io::AsyncBufReadExt;
-    use super::super::transport::IpcStream;
 
     struct Echo;
     #[async_trait]

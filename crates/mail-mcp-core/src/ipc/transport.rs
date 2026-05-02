@@ -40,10 +40,7 @@ mod imp {
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent)?;
                 use std::os::unix::fs::PermissionsExt;
-                let _ = std::fs::set_permissions(
-                    parent,
-                    std::fs::Permissions::from_mode(0o700),
-                );
+                let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
             }
             if path.exists() {
                 std::fs::remove_file(path)?;
@@ -107,7 +104,9 @@ mod imp {
     use std::sync::Mutex;
     use std::task::{Context, Poll};
     use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-    use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient, NamedPipeServer, ServerOptions};
+    use tokio::net::windows::named_pipe::{
+        ClientOptions, NamedPipeClient, NamedPipeServer, ServerOptions,
+    };
 
     /// Server-side listener. Owns the path and (re-)creates a fresh
     /// `NamedPipeServer` instance for each accept.
@@ -212,19 +211,13 @@ mod imp {
                 ServerOrClient::Client(c) => Pin::new(c).poll_write(cx, buf),
             }
         }
-        fn poll_flush(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-        ) -> Poll<io::Result<()>> {
+        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
             match &mut self.inner {
                 ServerOrClient::Server(s) => Pin::new(s).poll_flush(cx),
                 ServerOrClient::Client(c) => Pin::new(c).poll_flush(cx),
             }
         }
-        fn poll_shutdown(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-        ) -> Poll<io::Result<()>> {
+        fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
             match &mut self.inner {
                 ServerOrClient::Server(s) => Pin::new(s).poll_shutdown(cx),
                 ServerOrClient::Client(c) => Pin::new(c).poll_shutdown(cx),

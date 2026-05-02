@@ -187,7 +187,9 @@ mod tests {
         assert_eq!(p.ipc_socket(), tmp.path().join("run").join("ipc.sock"));
         #[cfg(windows)]
         assert!(
-            p.ipc_socket().to_string_lossy().starts_with(r"\\.\pipe\mail-mcp-"),
+            p.ipc_socket()
+                .to_string_lossy()
+                .starts_with(r"\\.\pipe\mail-mcp-"),
             "Windows ipc_socket should be a named-pipe path: {:?}",
             p.ipc_socket()
         );
