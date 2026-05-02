@@ -1,0 +1,14 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+
+# Per-developer signing config
+Signing.local.props
+
+# Installer outputs
+*.msi
+*.msix
+*.cer
+*.pfx

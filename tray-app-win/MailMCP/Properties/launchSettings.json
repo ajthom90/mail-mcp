@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "MailMCP": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "MAIL_MCP_GOOGLE_CLIENT_ID": "ci-dummy.apps.googleusercontent.com"
+      }
+    }
+  }
+}
