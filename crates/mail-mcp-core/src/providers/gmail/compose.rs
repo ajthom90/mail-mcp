@@ -1,7 +1,7 @@
 use super::client::AuthClient;
 use crate::error::{Error, Result};
 use crate::providers::types::{DraftInput, DraftSummary, OutgoingMessage};
-use crate::types::{DraftId, MessageId, ThreadId};
+use crate::types::{DraftId, MessageId};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 
@@ -104,6 +104,102 @@ mod tests {
             .unwrap();
         assert_eq!(id.as_str(), "m1");
     }
+
+    #[tokio::test]
+    async fn list_drafts_populates_subject_and_snippet() {
+        let server = MockServer::start().await;
+        // The list endpoint returns stubs.
+        Mock::given(method("GET"))
+            .and(path("/gmail/v1/users/me/drafts"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "drafts": [
+                    {"id":"d-1","message":{"id":"m-1","threadId":"t-1"}},
+                    {"id":"d-2","message":{"id":"m-2","threadId":"t-2"}},
+                ]
+            })))
+            .mount(&server)
+            .await;
+        // Each per-draft fetch returns full metadata.
+        Mock::given(method("GET"))
+            .and(path("/gmail/v1/users/me/drafts/d-1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": "d-1",
+                "message": {
+                    "id": "m-1",
+                    "snippet": "preview one",
+                    "internalDate": "1714579200000",
+                    "payload": {
+                        "headers": [
+                            {"name": "Subject", "value": "First draft"},
+                            {"name": "From", "value": "me@example.com"},
+                        ]
+                    }
+                }
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/gmail/v1/users/me/drafts/d-2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": "d-2",
+                "message": {
+                    "id": "m-2",
+                    "snippet": "preview two",
+                    "internalDate": "1714665600000",
+                    "payload": {
+                        "headers": [
+                            {"name": "Subject", "value": "Second draft"},
+                        ]
+                    }
+                }
+            })))
+            .mount(&server)
+            .await;
+
+        let c = auth(&server);
+        let base = format!("{}/gmail/v1", server.uri());
+        let drafts = list_drafts_impl(&c, &base).await.unwrap();
+        assert_eq!(drafts.len(), 2);
+        assert_eq!(drafts[0].id.as_str(), "d-1");
+        assert_eq!(drafts[0].subject, "First draft");
+        assert_eq!(drafts[0].snippet, "preview one");
+        assert_eq!(drafts[1].subject, "Second draft");
+        assert_eq!(drafts[1].snippet, "preview two");
+        // Date came from internalDate, not from chrono::Utc::now().
+        assert_eq!(drafts[0].date.timestamp_millis(), 1_714_579_200_000);
+    }
+
+    #[tokio::test]
+    async fn list_drafts_handles_missing_subject_header() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/gmail/v1/users/me/drafts"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "drafts": [{"id":"d-x","message":{"id":"m-x","threadId":"t-x"}}]
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/gmail/v1/users/me/drafts/d-x"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": "d-x",
+                "message": {
+                    "id": "m-x",
+                    "snippet": "no subject here",
+                    "internalDate": "1714579200000",
+                    "payload": {"headers": []}
+                }
+            })))
+            .mount(&server)
+            .await;
+
+        let c = auth(&server);
+        let base = format!("{}/gmail/v1", server.uri());
+        let drafts = list_drafts_impl(&c, &base).await.unwrap();
+        assert_eq!(drafts.len(), 1);
+        assert_eq!(drafts[0].subject, "");
+        assert_eq!(drafts[0].snippet, "no subject here");
+    }
 }
 
 #[derive(Serialize)]
@@ -127,20 +223,45 @@ struct DraftCreateResp {
 #[derive(Deserialize)]
 struct DraftListResp {
     #[serde(default)]
-    drafts: Vec<DraftMeta>,
+    drafts: Vec<DraftListEntry>,
+}
+
+/// The list endpoint only returns stub fields. We just need the id to fetch
+/// each draft's full metadata in a follow-up call.
+#[derive(Deserialize)]
+struct DraftListEntry {
+    id: String,
+}
+
+/// Per-draft response from `GET /users/me/drafts/{id}?format=metadata`. We pull
+/// the snippet and Subject header out so list_drafts can return non-empty data.
+#[derive(Deserialize)]
+struct DraftDetail {
+    id: String,
+    message: DraftDetailMsg,
 }
 
 #[derive(Deserialize)]
-struct DraftMeta {
+struct DraftDetailMsg {
     id: String,
-    message: DraftMsgRef,
+    #[serde(default)]
+    snippet: String,
+    #[serde(rename = "internalDate", default)]
+    internal_date: String,
+    #[serde(default)]
+    payload: Option<DraftDetailPayload>,
 }
 
 #[derive(Deserialize)]
-struct DraftMsgRef {
-    id: String,
-    #[serde(rename = "threadId")]
-    thread_id: String,
+struct DraftDetailPayload {
+    #[serde(default)]
+    headers: Vec<DraftDetailHeader>,
+}
+
+#[derive(Deserialize)]
+struct DraftDetailHeader {
+    name: String,
+    value: String,
 }
 
 #[derive(Deserialize)]
@@ -232,18 +353,56 @@ pub async fn update_draft_impl(
 }
 
 pub async fn list_drafts_impl(client: &AuthClient, base: &str) -> Result<Vec<DraftSummary>> {
-    let url = format!("{base}/users/me/drafts");
-    let resp: DraftListResp = client.get(&url).await?.error_for_status()?.json().await?;
+    let list_url = format!("{base}/users/me/drafts");
+    let resp: DraftListResp = client
+        .get(&list_url)
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+
+    // Gmail's drafts list endpoint only returns id + message stub. Fetch each
+    // draft's metadata individually to populate subject + snippet + date.
     let mut out = Vec::with_capacity(resp.drafts.len());
     for d in resp.drafts {
+        let detail_url = format!(
+            "{base}/users/me/drafts/{}?format=metadata&metadataHeaders=Subject",
+            d.id
+        );
+        let detail: DraftDetail = client
+            .get(&detail_url)
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+
+        let subject = detail
+            .message
+            .payload
+            .as_ref()
+            .and_then(|p| {
+                p.headers
+                    .iter()
+                    .find(|h| h.name.eq_ignore_ascii_case("Subject"))
+            })
+            .map(|h| h.value.clone())
+            .unwrap_or_default();
+
+        let date = detail
+            .message
+            .internal_date
+            .parse::<i64>()
+            .ok()
+            .and_then(chrono::DateTime::from_timestamp_millis)
+            .unwrap_or_else(chrono::Utc::now);
+
         out.push(DraftSummary {
-            id: DraftId::from(d.id),
-            message_id: MessageId::from(d.message.id),
-            subject: String::new(),
-            snippet: String::new(),
-            date: chrono::Utc::now(),
+            id: DraftId::from(detail.id),
+            message_id: MessageId::from(detail.message.id),
+            subject,
+            snippet: detail.message.snippet,
+            date,
         });
-        let _ = ThreadId::from(d.message.thread_id);
     }
     Ok(out)
 }
