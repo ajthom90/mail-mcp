@@ -3,13 +3,23 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Manual button — handy for cutting an unsigned dev build without tagging.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label for the DMG filename (e.g. 0.1.0-dev)"
+        required: false
+        default: "dev"
+
+# softprops/action-gh-release needs to create / update GitHub Releases on
+# tag pushes, which requires `contents: write` on the workflow's GITHUB_TOKEN.
+permissions:
+  contents: write
 
 jobs:
   release:
     runs-on: macos-15
-    if: ${{ secrets.MACOS_CERT_P12_BASE64 != '' }}
     env:
-      DEVELOPER_ID_NAME: ${{ secrets.DEVELOPER_ID_NAME }}
       MAIL_MCP_GOOGLE_CLIENT_ID: ${{ secrets.MAIL_MCP_GOOGLE_CLIENT_ID }}
     steps:
       - uses: actions/checkout@v4
@@ -18,7 +28,29 @@ jobs:
         run: |
           brew install create-dmg mint
           mint install yonaskolb/XcodeGen@2.44.0 --silent
+
+      # Decide whether this is a signed-and-notarized release or an unsigned
+      # dev build. Signing requires the cert + Apple API key + (optionally)
+      # the Sparkle signing key. If MACOS_CERT_P12_BASE64 isn't set we fall
+      # back to ad-hoc signing and skip notarization — the resulting DMG is
+      # still installable, but users have to right-click → Open the first
+      # time and won't get auto-updates via Sparkle.
+      - name: detect signing config
+        id: cfg
+        env:
+          HAVE_CERT: ${{ secrets.MACOS_CERT_P12_BASE64 != '' }}
+        run: |
+          if [ "$HAVE_CERT" = "true" ]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "Building signed + notarized release."
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "MACOS_CERT_P12_BASE64 not set — building UNSIGNED release."
+            echo "End users will need to right-click → Open the first time."
+          fi
+
       - name: import signing certificate
+        if: steps.cfg.outputs.signed == 'true'
         env:
           CERT_B64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
           CERT_PW: ${{ secrets.MACOS_CERT_PASSWORD }}
@@ -32,7 +64,9 @@ jobs:
           security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
               -P "$CERT_PW" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN"
+
       - name: write Apple API key
+        if: steps.cfg.outputs.signed == 'true'
         env:
           KEY_B64: ${{ secrets.APPLE_API_KEY_BASE64 }}
         run: |
@@ -41,39 +75,82 @@ jobs:
           echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/keys/AuthKey.p8" >> "$GITHUB_ENV"
           echo "APPLE_API_KEY_ID=${{ secrets.APPLE_API_KEY_ID }}" >> "$GITHUB_ENV"
           echo "APPLE_API_ISSUER_ID=${{ secrets.APPLE_API_ISSUER_ID }}" >> "$GITHUB_ENV"
+
       - name: write Config-Local.xcconfig
         working-directory: tray-app
+        env:
+          DEVELOPER_ID_NAME: ${{ secrets.DEVELOPER_ID_NAME }}
+          DEVELOPER_TEAM_ID: ${{ secrets.DEVELOPER_TEAM_ID }}
+          SIGNED: ${{ steps.cfg.outputs.signed }}
         run: |
-          cat > Config-Local.xcconfig <<EOF
-          MAIL_MCP_GOOGLE_CLIENT_ID = ${{ secrets.MAIL_MCP_GOOGLE_CLIENT_ID }}
+          {
+            echo "MAIL_MCP_GOOGLE_CLIENT_ID = ${MAIL_MCP_GOOGLE_CLIENT_ID:-stub.apps.googleusercontent.com}"
+          } > Config-Local.xcconfig
+          if [ "$SIGNED" = "true" ]; then
+            cat >> Config-Local.xcconfig <<EOF
           CODE_SIGN_IDENTITY = $DEVELOPER_ID_NAME
-          DEVELOPMENT_TEAM = ${{ secrets.DEVELOPER_TEAM_ID }}
+          DEVELOPMENT_TEAM = $DEVELOPER_TEAM_ID
           EOF
+          fi
+
       - name: xcodegen
         working-directory: tray-app
         run: mint run yonaskolb/XcodeGen@2.44.0 generate
+
       - name: archive + export
         working-directory: tray-app
+        env:
+          DEVELOPER_ID_NAME: ${{ secrets.DEVELOPER_ID_NAME }}
+          SIGNED: ${{ steps.cfg.outputs.signed }}
         run: |
-          xcodebuild archive \
-              -scheme MailMCP \
-              -configuration Release \
-              -archivePath build/MailMCP.xcarchive \
-              CODE_SIGN_STYLE=Manual \
-              CODE_SIGN_IDENTITY="$DEVELOPER_ID_NAME"
-          xcodebuild -exportArchive \
-              -archivePath build/MailMCP.xcarchive \
-              -exportPath build/export \
-              -exportOptionsPlist BuildScripts/exportOptions.plist
+          if [ "$SIGNED" = "true" ]; then
+            xcodebuild archive \
+                -scheme MailMCP \
+                -configuration Release \
+                -archivePath build/MailMCP.xcarchive \
+                CODE_SIGN_STYLE=Manual \
+                CODE_SIGN_IDENTITY="$DEVELOPER_ID_NAME"
+            xcodebuild -exportArchive \
+                -archivePath build/MailMCP.xcarchive \
+                -exportPath build/export \
+                -exportOptionsPlist BuildScripts/exportOptions.plist
+          else
+            # Unsigned build path. CODE_SIGNING_ALLOWED=NO disables the
+            # Developer ID requirement; we then ad-hoc sign so the bundle
+            # still has SOMETHING resembling a signature (otherwise some
+            # macOS versions refuse to launch from Applications).
+            xcodebuild archive \
+                -scheme MailMCP \
+                -configuration Release \
+                -archivePath build/MailMCP.xcarchive \
+                CODE_SIGNING_ALLOWED=NO
+            mkdir -p build/export
+            cp -R build/MailMCP.xcarchive/Products/Applications/MailMCP.app build/export/
+            codesign --force --deep --sign - build/export/MailMCP.app
+          fi
+
       - name: notarize
+        if: steps.cfg.outputs.signed == 'true'
         working-directory: tray-app
         run: BuildScripts/notarize.sh build/export/MailMCP.app
+
       - name: build DMG
         working-directory: tray-app
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          if [ -n "${GITHUB_REF_NAME:-}" ] && [ "${GITHUB_REF_NAME#v}" != "$GITHUB_REF_NAME" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${INPUT_VERSION:-dev}"
+          fi
+          if [ "${{ steps.cfg.outputs.signed }}" = "false" ]; then
+            VERSION="${VERSION}-unsigned"
+          fi
           BuildScripts/build-dmg.sh build/export/MailMCP.app build/MailMCP-$VERSION.dmg "$VERSION"
+
       - name: sign appcast
+        if: steps.cfg.outputs.signed == 'true'
         working-directory: tray-app
         env:
           ED_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
@@ -82,8 +159,20 @@ jobs:
           # SPM build pulls it into DerivedData; locate it.
           SIGN_TOOL="$(find ~/Library/Developer/Xcode/DerivedData -name sign_update -type f -perm -u+x | head -n 1)"
           echo "$ED_KEY" | "$SIGN_TOOL" -s build/MailMCP-*.dmg > build/signature.txt
-      - name: upload release asset
+
+      - name: upload artifact (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MailMCP-dmg
+          path: tray-app/build/MailMCP-*.dmg
+
+      - name: upload release asset (tag push)
+        if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
           files: tray-app/build/MailMCP-*.dmg
           generate_release_notes: true
+          prerelease: ${{ steps.cfg.outputs.signed == 'false' }}
+          body: |
+            ${{ steps.cfg.outputs.signed == 'false' && '⚠️ This is an UNSIGNED build. macOS will refuse to launch it from a normal double-click. The first time, right-click → Open and confirm the warning.' || '' }}

@@ -117,9 +117,26 @@ impl Paths {
     pub fn endpoint_json(&self) -> PathBuf {
         self.data.join("endpoint.json")
     }
+
+    /// Returns the IPC endpoint address for this user. On Unix this is a
+    /// Unix domain socket path (`<runtime>/ipc.sock`). On Windows it's a
+    /// named-pipe address (`\\.\pipe\mail-mcp-<USERNAME>`), which lives in
+    /// the OS pipe namespace, NOT under the runtime dir.
     pub fn ipc_socket(&self) -> PathBuf {
-        self.runtime.join("ipc.sock")
+        #[cfg(unix)]
+        {
+            self.runtime.join("ipc.sock")
+        }
+        #[cfg(windows)]
+        {
+            // The named-pipe namespace is `\\.\pipe\<name>`. Per-user scoping
+            // keeps separate user accounts isolated. Username is enough; SIDs
+            // require winapi calls and aren't worth the complexity here.
+            let user = std::env::var("USERNAME").unwrap_or_else(|_| "default".into());
+            PathBuf::from(format!(r"\\.\pipe\mail-mcp-{user}"))
+        }
     }
+
     pub fn pid_file(&self) -> PathBuf {
         self.runtime.join("daemon.pid")
     }
@@ -166,7 +183,16 @@ mod tests {
         assert_eq!(p.logs_dir(), tmp.path().join("logs"));
         assert_eq!(p.cache_dir(), tmp.path().join("cache"));
         assert_eq!(p.runtime_dir(), tmp.path().join("run"));
+        #[cfg(unix)]
         assert_eq!(p.ipc_socket(), tmp.path().join("run").join("ipc.sock"));
+        #[cfg(windows)]
+        assert!(
+            p.ipc_socket()
+                .to_string_lossy()
+                .starts_with(r"\\.\pipe\mail-mcp-"),
+            "Windows ipc_socket should be a named-pipe path: {:?}",
+            p.ipc_socket()
+        );
         assert_eq!(p.pid_file(), tmp.path().join("run").join("daemon.pid"));
     }
 
