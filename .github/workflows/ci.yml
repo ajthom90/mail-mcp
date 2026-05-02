@@ -24,7 +24,14 @@ jobs:
           components: rustfmt, clippy
       - name: install libdbus-1-dev (Linux only)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+        # apt-get update sometimes hits a stale mirror — retry up to 3x.
+        run: |
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then break; fi
+            echo "apt-get update attempt $attempt failed; sleeping 10s"
+            sleep 10
+          done
+          sudo apt-get install -y libdbus-1-dev pkg-config
       - uses: Swatinem/rust-cache@v2
       - name: cargo fmt
         run: cargo fmt --all -- --check
@@ -36,17 +43,16 @@ jobs:
         # macOS, gnome-keyring/kwallet on Linux). Linux runners don't have one.
         # `keychain-tests` is for manual local verification.
         run: cargo test --workspace
-      - name: install xcodegen 2.44.0 (macOS only)
+      - name: install xcodegen via mint (macOS only)
         if: runner.os == 'macOS'
-        # Homebrew currently ships 2.45.x which segfaults on macos-14 runners
-        # while generating the project. Pin to 2.44.0 by fetching the release
-        # zip directly and using its bundled install.sh.
+        # Both `brew install xcodegen` (2.45.4) and the pre-built 2.44.0 zip
+        # segfault on the macos-14 runner — likely a Swift-runtime mismatch
+        # in the prebuilt binaries. Mint compiles from source against the
+        # runner's own Swift, which works.
         run: |
-          curl -fsSL -o /tmp/xcodegen.zip \
-            https://github.com/yonaskolb/XcodeGen/releases/download/2.44.0/xcodegen.zip
-          unzip -q /tmp/xcodegen.zip -d /tmp/
-          sudo bash /tmp/xcodegen/install.sh /usr/local
-          xcodegen --version
+          brew install mint
+          mint install yonaskolb/XcodeGen@2.44.0 --silent
+          mint run yonaskolb/XcodeGen@2.44.0 --version
       - name: write stub Config-Local.xcconfig (macOS only)
         if: runner.os == 'macOS'
         working-directory: tray-app
@@ -59,7 +65,7 @@ jobs:
       - name: xcodegen generate (macOS only)
         if: runner.os == 'macOS'
         working-directory: tray-app
-        run: xcodegen generate
+        run: mint run yonaskolb/XcodeGen@2.44.0 generate
       - name: xcodebuild test (macOS only)
         if: runner.os == 'macOS'
         working-directory: tray-app
