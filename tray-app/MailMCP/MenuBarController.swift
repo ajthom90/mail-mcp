@@ -14,6 +14,7 @@ final class MenuBarController {
     private let statusVM: StatusViewModel
     private var refreshTimer: Timer?
     private var observation: AnyCancellable?
+    private lazy var wizard = WizardController(client: client)
 
     init(paths: MailMCPPaths = .defaultForUser()) {
         self.paths = paths
@@ -34,6 +35,7 @@ final class MenuBarController {
             do {
                 try await launcher.ensureRunning()
                 statusVM.start()
+                await maybeOpenWizard()
                 // Repaint the menu every time the VM's `status` changes.
                 withObservationTracking {
                     _ = statusVM.status
@@ -45,6 +47,18 @@ final class MenuBarController {
             } catch {
                 showLaunchError(error)
             }
+        }
+    }
+
+    private func maybeOpenWizard() async {
+        // Wait briefly for the first status to land, then check.
+        for _ in 0..<10 {
+            await statusVM.refresh()
+            if statusVM.status != nil { break }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        if let s = statusVM.status, s.accountCount == 0 && !s.onboardingComplete {
+            wizard.show()
         }
     }
 
@@ -76,6 +90,13 @@ final class MenuBarController {
         pauseItem.target = self
         menu.addItem(pauseItem)
 
+        let setup = NSMenuItem(
+            title: "Run Setup Again…",
+            action: #selector(openWizard),
+            keyEquivalent: ""
+        )
+        setup.target = self
+        menu.addItem(setup)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(
             title: "Quit MailMCP",
@@ -84,6 +105,8 @@ final class MenuBarController {
         ))
         statusItem.menu = menu
     }
+
+    @objc private func openWizard() { wizard.show() }
 
     @objc private func togglePause() {
         let newPaused = !(statusVM.status?.mcpPaused ?? false)
