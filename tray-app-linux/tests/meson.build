@@ -15,3 +15,10 @@ test_models = executable('test_models',
   include_directories: src_inc,
 )
 test('models', test_models)
+
+test_notifications = executable('test_notifications',
+  'test_notifications.c', '../src/ipc/models.c', '../src/ipc/notifications.c',
+  dependencies: [cmocka_dep, gio_dep, jsonglib_dep],
+  include_directories: src_inc,
+)
+test('notifications', test_notifications)
