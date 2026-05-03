@@ -34,7 +34,7 @@ impl MailProvider for M365Provider {
         unimplemented!("v0.2 Task 5: m365 get_thread via /me/messages?$filter=conversationId")
     }
     async fn get_message(&self, _id: &MessageId) -> Result<Message> {
-        unimplemented!("v0.2 Task 5: m365 get_message via /me/messages/{id}")
+        unimplemented!("v0.2 Task 5: m365 get_message via /me/messages/{{id}}")
     }
     async fn list_folders(&self) -> Result<Vec<Folder>> {
         unimplemented!("v0.2 Task 4: m365 list_folders via /me/mailFolders")
@@ -76,7 +76,7 @@ impl MailProvider for M365Provider {
         unimplemented!("v0.2 Task 7: /me/sendMail")
     }
     async fn send_draft(&self, _id: &DraftId) -> Result<MessageId> {
-        unimplemented!("v0.2 Task 7: /me/messages/{id}/send")
+        unimplemented!("v0.2 Task 7: /me/messages/{{id}}/send")
     }
 }
 
