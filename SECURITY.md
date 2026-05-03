@@ -44,3 +44,5 @@ Out of scope:
 mail-mcp is a *local-only* MCP bridge. The daemon binds IPC to a per-user UDS or named pipe with `0600` permissions. OAuth tokens live in the OS keychain (macOS Keychain / Windows Credential Manager / libsecret on Linux). The daemon never accepts inbound network connections except the MCP HTTP endpoint on `127.0.0.1` (configurable, off by default for stdio mode).
 
 Approval gates default to `ask` for all `send`, `trash`, and `draftify` categories. The user explicitly approves each action (or sets a per-account policy of `allow` / `block`). The MCP host (Claude Desktop, etc.) cannot bypass this gate.
+
+For full threat-model details (assets, threats, defenses, residual risks), see [`docs/threat-model.md`](docs/threat-model.md).
