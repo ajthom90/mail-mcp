@@ -17,6 +17,11 @@ internal sealed class MockIpcServer : IAsyncDisposable
 
     private readonly NamedPipeServerStream _pipe;
     private readonly CancellationTokenSource _cts = new();
+    // Serializes all writes to _writer. The server's RespondAsync runs on the
+    // accept loop; PushNotificationAsync runs on the test thread. Without
+    // this both can call StreamWriter.WriteLineAsync concurrently and trip
+    // "stream is currently in use by a previous operation."
+    private readonly SemaphoreSlim _writeMu = new(1, 1);
     private Task? _loopTask;
     private StreamWriter? _writer;
     private TaskCompletionSource _connected = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -44,8 +49,22 @@ internal sealed class MockIpcServer : IAsyncDisposable
     {
         await _connected.Task.ConfigureAwait(false);
         if (_writer is null) return;
-        await _writer.WriteLineAsync(frame).ConfigureAwait(false);
-        await _writer.FlushAsync().ConfigureAwait(false);
+        await WriteLineAsync(frame).ConfigureAwait(false);
+    }
+
+    private async Task WriteLineAsync(string frame)
+    {
+        if (_writer is null) return;
+        await _writeMu.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await _writer.WriteLineAsync(frame).ConfigureAwait(false);
+            await _writer.FlushAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            _writeMu.Release();
+        }
     }
 
     private async Task RunAsync(CancellationToken ct)
@@ -86,8 +105,7 @@ internal sealed class MockIpcServer : IAsyncDisposable
         var body = template.Replace("$ID", id?.ToString() ?? "0");
         // Collapse interior newlines so the frame stays one line.
         body = body.Replace("\n", "").Replace("\r", "");
-        await _writer.WriteLineAsync(body).ConfigureAwait(false);
-        await _writer.FlushAsync().ConfigureAwait(false);
+        await WriteLineAsync(body).ConfigureAwait(false);
     }
 
     private static string? DefaultFor(string method, long? id) => method switch
@@ -108,5 +126,6 @@ internal sealed class MockIpcServer : IAsyncDisposable
         }
         _writer?.Dispose();
         _pipe.Dispose();
+        _writeMu.Dispose();
     }
 }
