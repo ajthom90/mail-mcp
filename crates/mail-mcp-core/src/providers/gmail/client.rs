@@ -288,6 +288,14 @@ impl AuthClient {
         self.send(self.http.put(url).json(body)).await
     }
 
+    pub async fn patch_json<B: serde::Serialize>(
+        &self,
+        url: &str,
+        body: &B,
+    ) -> Result<reqwest::Response> {
+        self.send(self.http.patch(url).json(body)).await
+    }
+
     pub async fn delete(&self, url: &str) -> Result<reqwest::Response> {
         self.send(self.http.delete(url)).await
     }
