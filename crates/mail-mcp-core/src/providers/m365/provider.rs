@@ -4,9 +4,9 @@
 //! return a structured "not implemented yet" error in tests.
 
 use crate::error::Result;
+use crate::providers::gmail::AuthClient;
 use crate::providers::r#trait::{MailProvider, SearchResults};
 use crate::providers::types::*;
-use crate::providers::gmail::AuthClient;
 use crate::types::{DraftId, FolderId, LabelId, MessageId, ThreadId};
 use async_trait::async_trait;
 
