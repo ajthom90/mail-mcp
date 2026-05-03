@@ -1,3 +1,8 @@
+// `decode` and `RawMessage`'s fields are scaffold for v0.2 Tasks 5-7
+// (messages.rs, triage.rs, compose.rs); without those callers `cargo check`
+// flags them as dead. The attribute comes off as soon as Task 5 lands.
+#![allow(dead_code)]
+
 //! Decoding raw Microsoft Graph message JSON into our domain `Message` type.
 //!
 //! Graph's mail resource is shaped quite differently from Gmail's — addresses
@@ -76,9 +81,21 @@ pub struct RawBody {
 
 pub fn decode(raw: RawMessage) -> Result<Message, Error> {
     let from = raw.from.as_ref().and_then(to_email_address);
-    let to: Vec<_> = raw.to_recipients.iter().filter_map(to_email_address).collect();
-    let cc: Vec<_> = raw.cc_recipients.iter().filter_map(to_email_address).collect();
-    let bcc: Vec<_> = raw.bcc_recipients.iter().filter_map(to_email_address).collect();
+    let to: Vec<_> = raw
+        .to_recipients
+        .iter()
+        .filter_map(to_email_address)
+        .collect();
+    let cc: Vec<_> = raw
+        .cc_recipients
+        .iter()
+        .filter_map(to_email_address)
+        .collect();
+    let bcc: Vec<_> = raw
+        .bcc_recipients
+        .iter()
+        .filter_map(to_email_address)
+        .collect();
 
     let date = raw
         .received_date_time
@@ -88,12 +105,14 @@ pub fn decode(raw: RawMessage) -> Result<Message, Error> {
         .ok_or_else(|| Error::Provider("message missing receivedDateTime".into()))?;
 
     let (body_text, body_html) = match raw.body {
-        Some(RawBody { content_type, content: Some(c), .. }) => {
-            match content_type.as_deref() {
-                Some("html") | Some("Html") | Some("HTML") => (None, Some(c)),
-                _ => (Some(c), None),
-            }
-        }
+        Some(RawBody {
+            content_type,
+            content: Some(c),
+            ..
+        }) => match content_type.as_deref() {
+            Some("html") | Some("Html") | Some("HTML") => (None, Some(c)),
+            _ => (Some(c), None),
+        },
         _ => (None, None),
     };
 
