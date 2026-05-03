@@ -14,8 +14,8 @@
 //! stays predictable; user-created sub-folders get exposed in a later task
 //! when the search-by-folder feature lands.
 
-use super::client::AuthClient;
 use crate::error::Result;
+use crate::providers::gmail::AuthClient;
 use crate::providers::types::{Folder, Label};
 use crate::types::{FolderId, LabelId};
 use serde::Deserialize;
