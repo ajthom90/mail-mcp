@@ -181,7 +181,9 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("PATCH"))
             .and(path("/v1.0/me/messages/m1"))
-            .and(body_partial_json(json!({ "flag": { "flagStatus": "flagged" } })))
+            .and(body_partial_json(
+                json!({ "flag": { "flagStatus": "flagged" } }),
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
             .mount(&server)
             .await;
@@ -220,7 +222,9 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/v1.0/me/messages/m1/move"))
-            .and(body_partial_json(json!({ "destinationId": "deleteditems" })))
+            .and(body_partial_json(
+                json!({ "destinationId": "deleteditems" }),
+            ))
             .respond_with(ResponseTemplate::new(201).set_body_json(json!({})))
             .mount(&server)
             .await;
