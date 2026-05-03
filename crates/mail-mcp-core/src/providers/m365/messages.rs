@@ -39,8 +39,7 @@ pub async fn search_impl(
     q: &SearchQuery,
 ) -> Result<SearchResults> {
     let url = build_search_url(base, q);
-    let resp: ListResponse<RawMessage> =
-        client.get(&url).await?.error_for_status()?.json().await?;
+    let resp: ListResponse<RawMessage> = client.get(&url).await?.error_for_status()?.json().await?;
 
     // Group by conversationId; latest receivedDateTime wins as the
     // thread representative. Graph already returns search results in
@@ -76,17 +75,12 @@ pub async fn search_impl(
     })
 }
 
-pub async fn get_thread_impl(
-    client: &AuthClient,
-    base: &str,
-    id: &ThreadId,
-) -> Result<Thread> {
+pub async fn get_thread_impl(client: &AuthClient, base: &str, id: &ThreadId) -> Result<Thread> {
     let url = format!(
         "{base}/me/messages?$filter=conversationId eq '{}'&$orderby=receivedDateTime asc&$top=200",
         urlencode(id.as_str()),
     );
-    let resp: ListResponse<RawMessage> =
-        client.get(&url).await?.error_for_status()?.json().await?;
+    let resp: ListResponse<RawMessage> = client.get(&url).await?.error_for_status()?.json().await?;
 
     let mut messages = Vec::with_capacity(resp.value.len());
     for raw in resp.value {
@@ -103,11 +97,7 @@ pub async fn get_thread_impl(
     })
 }
 
-pub async fn get_message_impl(
-    client: &AuthClient,
-    base: &str,
-    id: &MessageId,
-) -> Result<Message> {
+pub async fn get_message_impl(client: &AuthClient, base: &str, id: &MessageId) -> Result<Message> {
     let url = format!("{base}/me/messages/{}", urlencode(id.as_str()));
     let raw: RawMessage = client.get(&url).await?.error_for_status()?.json().await?;
     decode(raw)
