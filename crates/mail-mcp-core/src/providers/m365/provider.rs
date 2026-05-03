@@ -1,8 +1,8 @@
-//! Microsoft Graph provider. The v0.2 build-out (Tasks 3-7) replaces each
-//! `unimplemented!()` with the real Graph API calls; until then the type
-//! exists so the daemon's `provider` dispatch can recognise `"m365"` and
-//! return a structured "not implemented yet" error in tests.
+//! Microsoft Graph provider. Wires the per-feature `_impl` functions in
+//! sibling modules (parse / folders / messages / triage / compose) into the
+//! `MailProvider` trait.
 
+use super::{compose, folders, messages, triage};
 use crate::error::Result;
 use crate::providers::gmail::AuthClient;
 use crate::providers::r#trait::{MailProvider, SearchResults};
@@ -10,73 +10,84 @@ use crate::providers::types::*;
 use crate::types::{DraftId, FolderId, LabelId, MessageId, ThreadId};
 use async_trait::async_trait;
 
-#[derive(Clone)]
+const PROD_BASE: &str = "https://graph.microsoft.com/v1.0";
+
 pub struct M365Provider {
-    /// Reuse Gmail's AuthClient — it speaks generic OAuth 2.0 against whatever
-    /// `ProviderConfig.token_url` was configured. The Microsoft `ProviderConfig`
-    /// from `oauth::microsoft` points it at the Graph token endpoint.
-    #[allow(dead_code)] // populated in v0.2 Task 5+ when the HTTP wiring lands
-    auth: AuthClient,
+    pub client: AuthClient,
+    pub base: String,
+    pub user_email: String,
 }
 
 impl M365Provider {
-    pub fn new(auth: AuthClient) -> Self {
-        Self { auth }
+    pub fn new(client: AuthClient, user_email: String) -> Self {
+        Self {
+            client,
+            base: PROD_BASE.into(),
+            user_email,
+        }
+    }
+
+    pub fn with_base(client: AuthClient, base: String, user_email: String) -> Self {
+        Self {
+            client,
+            base,
+            user_email,
+        }
     }
 }
 
 #[async_trait]
 impl MailProvider for M365Provider {
-    async fn search(&self, _q: &SearchQuery) -> Result<SearchResults> {
-        unimplemented!("v0.2 Task 5: m365 search via /me/messages?$search=")
+    async fn search(&self, q: &SearchQuery) -> Result<SearchResults> {
+        messages::search_impl(&self.client, &self.base, q).await
     }
-    async fn get_thread(&self, _id: &ThreadId) -> Result<Thread> {
-        unimplemented!("v0.2 Task 5: m365 get_thread via /me/messages?$filter=conversationId")
+    async fn get_thread(&self, id: &ThreadId) -> Result<Thread> {
+        messages::get_thread_impl(&self.client, &self.base, id).await
     }
-    async fn get_message(&self, _id: &MessageId) -> Result<Message> {
-        unimplemented!("v0.2 Task 5: m365 get_message via /me/messages/{{id}}")
+    async fn get_message(&self, id: &MessageId) -> Result<Message> {
+        messages::get_message_impl(&self.client, &self.base, id).await
     }
     async fn list_folders(&self) -> Result<Vec<Folder>> {
-        unimplemented!("v0.2 Task 4: m365 list_folders via /me/mailFolders")
+        folders::list_folders_impl(&self.client, &self.base).await
     }
     async fn list_labels(&self) -> Result<Vec<Label>> {
-        unimplemented!("v0.2 Task 4: m365 doesn't have labels — return categories")
+        folders::list_labels_impl(&self.client, &self.base).await
     }
     async fn list_drafts(&self) -> Result<Vec<DraftSummary>> {
-        unimplemented!("v0.2 Task 7: m365 list_drafts via /me/mailFolders/Drafts/messages")
+        compose::list_drafts_impl(&self.client, &self.base).await
     }
-    async fn mark_read(&self, _ids: &[MessageId], _read: bool) -> Result<()> {
-        unimplemented!("v0.2 Task 6")
+    async fn mark_read(&self, ids: &[MessageId], read: bool) -> Result<()> {
+        triage::mark_read_impl(&self.client, &self.base, ids, read).await
     }
-    async fn star(&self, _ids: &[MessageId], _starred: bool) -> Result<()> {
-        unimplemented!("v0.2 Task 6")
+    async fn star(&self, ids: &[MessageId], starred: bool) -> Result<()> {
+        triage::star_impl(&self.client, &self.base, ids, starred).await
     }
-    async fn label(&self, _ids: &[MessageId], _label: &LabelId, _on: bool) -> Result<()> {
-        unimplemented!("v0.2 Task 6: maps to Graph categories")
+    async fn label(&self, ids: &[MessageId], label: &LabelId, on: bool) -> Result<()> {
+        triage::label_impl(&self.client, &self.base, ids, label, on).await
     }
-    async fn move_to(&self, _ids: &[MessageId], _folder: &FolderId) -> Result<()> {
-        unimplemented!("v0.2 Task 6")
+    async fn move_to(&self, ids: &[MessageId], folder: &FolderId) -> Result<()> {
+        triage::move_to_impl(&self.client, &self.base, ids, folder).await
     }
-    async fn archive(&self, _ids: &[MessageId]) -> Result<()> {
-        unimplemented!("v0.2 Task 6")
+    async fn archive(&self, ids: &[MessageId]) -> Result<()> {
+        triage::archive_impl(&self.client, &self.base, ids).await
     }
-    async fn trash(&self, _ids: &[MessageId]) -> Result<()> {
-        unimplemented!("v0.2 Task 6")
+    async fn trash(&self, ids: &[MessageId]) -> Result<()> {
+        triage::trash_impl(&self.client, &self.base, ids).await
     }
-    async fn untrash(&self, _ids: &[MessageId]) -> Result<()> {
-        unimplemented!("v0.2 Task 6")
+    async fn untrash(&self, ids: &[MessageId]) -> Result<()> {
+        triage::untrash_impl(&self.client, &self.base, ids).await
     }
-    async fn create_draft(&self, _d: &DraftInput) -> Result<DraftId> {
-        unimplemented!("v0.2 Task 7")
+    async fn create_draft(&self, d: &DraftInput) -> Result<DraftId> {
+        compose::create_draft_impl(&self.client, &self.base, d).await
     }
-    async fn update_draft(&self, _id: &DraftId, _d: &DraftInput) -> Result<()> {
-        unimplemented!("v0.2 Task 7")
+    async fn update_draft(&self, id: &DraftId, d: &DraftInput) -> Result<()> {
+        compose::update_draft_impl(&self.client, &self.base, id, d).await
     }
-    async fn send_message(&self, _m: &OutgoingMessage) -> Result<MessageId> {
-        unimplemented!("v0.2 Task 7: /me/sendMail")
+    async fn send_message(&self, m: &OutgoingMessage) -> Result<MessageId> {
+        compose::send_message_impl(&self.client, &self.base, m).await
     }
-    async fn send_draft(&self, _id: &DraftId) -> Result<MessageId> {
-        unimplemented!("v0.2 Task 7: /me/messages/{{id}}/send")
+    async fn send_draft(&self, id: &DraftId) -> Result<MessageId> {
+        compose::send_draft_impl(&self.client, &self.base, id).await
     }
 }
 
@@ -86,6 +97,6 @@ mod tests {
 
     #[test]
     fn provider_is_object_safe() {
-        fn _assert(_: &dyn MailProvider) {}
+        fn _f(_: Box<dyn MailProvider>) {}
     }
 }
