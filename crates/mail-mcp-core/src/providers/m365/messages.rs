@@ -98,7 +98,10 @@ pub async fn get_thread_impl(client: &AuthClient, base: &str, id: &ThreadId) -> 
 }
 
 pub async fn get_message_impl(client: &AuthClient, base: &str, id: &MessageId) -> Result<Message> {
-    let url = format!("{base}/me/messages/{}", urlencode(id.as_str()));
+    // Graph message IDs are base64url + dash + dots; the URL-safe subset
+    // doesn't need percent-encoding for path components, and over-encoding
+    // (e.g. encoding the dash) makes the request a different URL.
+    let url = format!("{base}/me/messages/{}", id.as_str());
     let raw: RawMessage = client.get(&url).await?.error_for_status()?.json().await?;
     decode(raw)
 }
