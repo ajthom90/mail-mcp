@@ -226,9 +226,13 @@ mod tests {
             .mount(&server)
             .await;
         let c = auth(&server);
-        let r = search_impl(&c, &format!("{}/v1.0", server.uri()), &SearchQuery::default())
-            .await
-            .unwrap();
+        let r = search_impl(
+            &c,
+            &format!("{}/v1.0", server.uri()),
+            &SearchQuery::default(),
+        )
+        .await
+        .unwrap();
         assert_eq!(
             r.next_cursor.as_deref(),
             Some("https://graph.microsoft.com/v1.0/me/messages?$skiptoken=ABCD")
@@ -249,9 +253,13 @@ mod tests {
             .mount(&server)
             .await;
         let c = auth(&server);
-        let t = get_thread_impl(&c, &format!("{}/v1.0", server.uri()), &ThreadId::from("c-A"))
-            .await
-            .unwrap();
+        let t = get_thread_impl(
+            &c,
+            &format!("{}/v1.0", server.uri()),
+            &ThreadId::from("c-A"),
+        )
+        .await
+        .unwrap();
         assert_eq!(t.messages.len(), 2);
         assert_eq!(t.subject, "First");
     }
