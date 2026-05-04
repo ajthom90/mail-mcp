@@ -10,7 +10,7 @@ struct OAuthView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Sign in to Gmail")
+            Text("Sign in to \(providerDisplayName)")
                 .font(.title).bold()
             Text(status).foregroundStyle(.secondary)
             ProgressView()
@@ -27,12 +27,19 @@ struct OAuthView: View {
         }
     }
 
+    private var providerDisplayName: String {
+        switch state.selectedProvider {
+        case "m365": return "Microsoft 365"
+        default: return "Gmail"
+        }
+    }
+
     private func begin() async {
         status = "Asking the daemon to start sign-in…"
         do {
             let progress: AccountAddOAuthInProgress = try await client.call(
                 "accounts.add_oauth",
-                params: ["provider": .string("gmail")]
+                params: ["provider": .string(state.selectedProvider)]
             )
             state.pendingChallengeId = progress.challengeId
             state.pendingAuthURL = URL(string: progress.authUrl)
