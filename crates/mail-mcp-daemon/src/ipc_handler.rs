@@ -12,6 +12,8 @@ use mail_mcp_core::paths::Paths;
 use mail_mcp_core::permissions::approvals::{ApprovalDecision, ApprovalId, ApprovalQueue};
 use mail_mcp_core::permissions::{Category, Permissions, Policy};
 use mail_mcp_core::providers::gmail::{AuthClient, GmailProvider};
+use mail_mcp_core::providers::m365::M365Provider;
+use mail_mcp_core::providers::r#trait::MailProvider;
 use mail_mcp_core::secrets::{KeyKind, SecretStore};
 use mail_mcp_core::storage::Storage;
 use mail_mcp_core::types::{AccountId, ProviderKind};
@@ -32,7 +34,8 @@ pub struct DaemonHandler {
     pub started_at: Instant,
     pub mcp_endpoint: McpEndpointInfo,
     pub mcp_paused: Arc<AtomicBool>,
-    pub oauth_cfg: oauth::ProviderConfig,
+    pub oauth_cfg_google: oauth::ProviderConfig,
+    pub oauth_cfg_microsoft: oauth::ProviderConfig,
     pub http: reqwest::Client,
     #[allow(dead_code)]
     pub paths: Paths,
@@ -43,6 +46,7 @@ pub struct DaemonHandler {
 pub struct PendingOAuth {
     #[allow(dead_code)]
     pub label_hint: Option<String>,
+    pub provider: ProviderKind,
     pub join: tokio::task::JoinHandle<CoreResult<(OAuthTokens, String /*email*/)>>,
 }
 
@@ -120,41 +124,33 @@ impl Handler for DaemonHandler {
 
 impl DaemonHandler {
     async fn add_oauth(&self, params: Value) -> CoreResult<Value> {
-        let provider = params
+        let provider_str = params
             .get("provider")
             .and_then(|v| v.as_str())
             .ok_or_else(|| CoreError::Provider("missing provider".into()))?
             .to_string();
-        if provider != "gmail" {
-            return Err(CoreError::Provider(format!(
-                "provider not supported in v0.1a: {provider}"
-            )));
-        }
-        let challenge = oauth::begin_authorization(&self.oauth_cfg, None).await?;
+        let provider = ProviderKind::from_str(&provider_str).map_err(CoreError::Provider)?;
+        let cfg = match provider {
+            ProviderKind::Gmail => self.oauth_cfg_google.clone(),
+            ProviderKind::Microsoft365 => self.oauth_cfg_microsoft.clone(),
+            ProviderKind::Imap => {
+                return Err(CoreError::Provider(
+                    "imap provider not supported by add_oauth".into(),
+                ))
+            }
+        };
+        let challenge = oauth::begin_authorization(&cfg, None).await?;
         let challenge_id = Ulid::new().to_string();
         let auth_url = challenge.auth_url.clone();
 
-        // Spawn a task to await the callback + exchange the code + fetch user info.
-        let cfg = self.oauth_cfg.clone();
+        // Spawn a task to await the callback + exchange the code + fetch user email
+        // from the provider's userinfo endpoint.
         let http = self.http.clone();
         let join = tokio::spawn(async move {
             let tokens =
                 oauth::complete_authorization(&http, &cfg, challenge, Duration::from_secs(300))
                     .await?;
-            // Fetch user email via Google's userinfo endpoint.
-            let resp = http
-                .get("https://openidconnect.googleapis.com/v1/userinfo")
-                .bearer_auth(&tokens.access_token)
-                .send()
-                .await?
-                .error_for_status()?
-                .json::<serde_json::Value>()
-                .await?;
-            let email = resp
-                .get("email")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown")
-                .to_string();
+            let email = fetch_user_email(&http, provider, &tokens.access_token).await?;
             Ok::<_, CoreError>((tokens, email))
         });
 
@@ -162,6 +158,7 @@ impl DaemonHandler {
             challenge_id.clone(),
             PendingOAuth {
                 label_hint: None,
+                provider,
                 join,
             },
         );
@@ -204,7 +201,7 @@ impl DaemonHandler {
             &self.storage,
             &NewAccount {
                 label,
-                provider: ProviderKind::Gmail,
+                provider: pending.provider,
                 email: email.clone(),
                 config: serde_json::json!({}),
                 scopes: tokens
@@ -216,22 +213,26 @@ impl DaemonHandler {
         )
         .await?;
         Permissions::install_defaults(&self.storage, id).await?;
-        if let Some(rt) = &tokens.refresh_token {
-            self.secrets.set(id, KeyKind::RefreshToken, rt)?;
-        } else {
-            return Err(CoreError::OAuth("Google did not return a refresh_token; ensure prompt=consent + access_type=offline".into()));
-        }
+        let Some(rt) = tokens.refresh_token.clone() else {
+            return Err(CoreError::OAuth(format!(
+                "{} did not return a refresh_token",
+                pending.provider.as_str()
+            )));
+        };
+        self.secrets.set(id, KeyKind::RefreshToken, &rt)?;
 
         // Build provider and register. Hand AuthClient a rotation callback so
-        // that if Google ever rotates the refresh token, the new value is
-        // persisted to the keychain immediately — closes #2.
-        let auth_client = AuthClient::with_rotation_callback(
+        // that a rotated refresh token is persisted to the keychain immediately
+        // — closes #2 (Microsoft rotates on every refresh; Google occasionally).
+        let provider = build_provider(
             self.http.clone(),
-            self.oauth_cfg.clone(),
+            &self.oauth_cfg_google,
+            &self.oauth_cfg_microsoft,
+            pending.provider,
             tokens,
-            Some(make_rotation_callback(self.secrets, id)),
+            email.clone(),
+            make_rotation_callback(self.secrets, id),
         );
-        let provider = Arc::new(GmailProvider::new(auth_client, email.clone()));
         self.providers.insert(id, provider).await;
 
         let account = AccountStore::get(&self.storage, id)
@@ -331,13 +332,15 @@ impl DaemonHandler {
     }
 }
 
-/// Hydrate `ProviderRegistry` from persisted accounts at daemon startup. For each account
-/// we read the refresh token from the keychain and construct a Gmail provider.
+/// Hydrate `ProviderRegistry` from persisted accounts at daemon startup. For each
+/// account we read the refresh token from the keychain and construct the right
+/// concrete provider for `account.provider`.
 pub async fn hydrate_providers(
     storage: &Storage,
     secrets: &SecretStore,
     http: &reqwest::Client,
-    cfg: &oauth::ProviderConfig,
+    cfg_google: &oauth::ProviderConfig,
+    cfg_microsoft: &oauth::ProviderConfig,
     registry: &ProviderRegistry,
 ) -> CoreResult<()> {
     for acc in AccountStore::list(storage).await? {
@@ -350,16 +353,92 @@ pub async fn hydrate_providers(
             expires_at: chrono::Utc::now() - chrono::Duration::seconds(1),
             scope: None,
         };
-        let auth = AuthClient::with_rotation_callback(
+        let provider = build_provider(
             http.clone(),
-            cfg.clone(),
+            cfg_google,
+            cfg_microsoft,
+            acc.provider,
             tokens,
-            Some(make_rotation_callback(*secrets, acc.id)),
+            acc.email.clone(),
+            make_rotation_callback(*secrets, acc.id),
         );
-        let provider = Arc::new(GmailProvider::new(auth, acc.email.clone()));
         registry.insert(acc.id, provider).await;
     }
     Ok(())
+}
+
+/// Construct the concrete `MailProvider` for a given `ProviderKind`, sharing the
+/// `AuthClient` + rotation-callback setup. Skips IMAP (returns a no-op stub —
+/// IMAP support is its own milestone).
+fn build_provider(
+    http: reqwest::Client,
+    cfg_google: &oauth::ProviderConfig,
+    cfg_microsoft: &oauth::ProviderConfig,
+    kind: ProviderKind,
+    tokens: OAuthTokens,
+    email: String,
+    rotation_cb: mail_mcp_core::providers::gmail::RefreshRotationCallback,
+) -> Arc<dyn MailProvider> {
+    match kind {
+        ProviderKind::Gmail => {
+            let auth = AuthClient::with_rotation_callback(
+                http,
+                cfg_google.clone(),
+                tokens,
+                Some(rotation_cb),
+            );
+            Arc::new(GmailProvider::new(auth, email))
+        }
+        ProviderKind::Microsoft365 => {
+            let auth = AuthClient::with_rotation_callback(
+                http,
+                cfg_microsoft.clone(),
+                tokens,
+                Some(rotation_cb),
+            );
+            Arc::new(M365Provider::new(auth, email))
+        }
+        ProviderKind::Imap => {
+            // Unreachable for now — add_oauth rejects "imap" and no persisted
+            // accounts can have it. If we add IMAP later, build the provider here.
+            unreachable!("imap provider not implemented")
+        }
+    }
+}
+
+/// Fetch the user's primary email address from the provider's userinfo endpoint.
+async fn fetch_user_email(
+    http: &reqwest::Client,
+    kind: ProviderKind,
+    access_token: &str,
+) -> CoreResult<String> {
+    let (url, primary, fallback) = match kind {
+        ProviderKind::Gmail => (
+            "https://openidconnect.googleapis.com/v1/userinfo",
+            "email",
+            None,
+        ),
+        ProviderKind::Microsoft365 => (
+            "https://graph.microsoft.com/v1.0/me",
+            "mail",
+            Some("userPrincipalName"),
+        ),
+        ProviderKind::Imap => unreachable!("imap has no userinfo endpoint"),
+    };
+    let resp = http
+        .get(url)
+        .bearer_auth(access_token)
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    let primary_val = resp.get(primary).and_then(|v| v.as_str());
+    let fallback_val = fallback.and_then(|f| resp.get(f).and_then(|v| v.as_str()));
+    Ok(primary_val
+        .or(fallback_val)
+        .unwrap_or("unknown")
+        .to_string())
 }
 
 /// Build a callback that persists a rotated Gmail refresh token to the

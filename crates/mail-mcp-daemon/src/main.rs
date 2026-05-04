@@ -29,6 +29,10 @@ struct Args {
     /// baked into the binary via build.rs; for development pass it explicitly.
     #[arg(long, env = "MAIL_MCP_GOOGLE_CLIENT_ID")]
     google_client_id: String,
+    /// Microsoft Graph OAuth client_id. Required for Microsoft 365 account add.
+    /// Same baking convention as `google_client_id`.
+    #[arg(long, env = "MAIL_MCP_MICROSOFT_CLIENT_ID")]
+    microsoft_client_id: String,
     /// Force the bound HTTP port (otherwise OS-assigned). Useful in dev.
     #[arg(long, env = "MAIL_MCP_HTTP_PORT")]
     http_port: Option<u16>,
@@ -60,10 +64,19 @@ async fn main() -> Result<()> {
     let http = reqwest::Client::builder()
         .user_agent(concat!("mail-mcp/", env!("CARGO_PKG_VERSION")))
         .build()?;
-    let oauth_cfg = oauth::google::config(args.google_client_id);
+    let oauth_cfg_google = oauth::google::config(args.google_client_id);
+    let oauth_cfg_microsoft = oauth::microsoft::config(args.microsoft_client_id);
 
     let providers = mcp::dispatch::ProviderRegistry::new();
-    ipc_handler::hydrate_providers(&storage, &secrets, &http, &oauth_cfg, &providers).await?;
+    ipc_handler::hydrate_providers(
+        &storage,
+        &secrets,
+        &http,
+        &oauth_cfg_google,
+        &oauth_cfg_microsoft,
+        &providers,
+    )
+    .await?;
 
     let approvals = ApprovalQueue::new(Duration::from_secs(300));
     let trust = SessionTrust::new();
@@ -139,7 +152,8 @@ async fn main() -> Result<()> {
         started_at: Instant::now(),
         mcp_endpoint: endpoint,
         mcp_paused,
-        oauth_cfg,
+        oauth_cfg_google,
+        oauth_cfg_microsoft,
         http,
         paths: paths.clone(),
         notif_tx: notif_tx.clone(),

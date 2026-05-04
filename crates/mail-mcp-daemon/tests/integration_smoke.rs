@@ -13,6 +13,8 @@ async fn daemon_serves_mcp_tools_list() {
         .arg(dir.path())
         .arg("--google-client-id")
         .arg("dummy")
+        .arg("--microsoft-client-id")
+        .arg("dummy")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
