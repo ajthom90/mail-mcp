@@ -52,6 +52,12 @@ enum AccountsCmd {
         #[arg(long)]
         label: Option<String>,
     },
+    /// Add a new Microsoft 365 / Outlook account via OAuth (opens browser).
+    AddM365 {
+        /// Friendly label for the account; defaults to the email.
+        #[arg(long)]
+        label: Option<String>,
+    },
     /// Remove an account by id.
     Remove { id: String },
 }
@@ -116,43 +122,10 @@ async fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&v)?);
         }
         Cmd::Accounts(AccountsCmd::AddGmail { label }) => {
-            let v = client
-                .call(
-                    "accounts.add_oauth",
-                    serde_json::json!({"provider": "gmail"}),
-                )
-                .await?;
-            let challenge_id = v["challenge_id"].as_str().unwrap_or("").to_string();
-            let auth_url = v["auth_url"].as_str().unwrap_or("").to_string();
-            println!("Opening browser:\n  {auth_url}\nWaiting for sign-in to complete...");
-            // Best-effort browser launch.
-            #[cfg(target_os = "macos")]
-            {
-                let _ = std::process::Command::new("open").arg(&auth_url).status();
-            }
-            #[cfg(target_os = "linux")]
-            {
-                let _ = std::process::Command::new("xdg-open")
-                    .arg(&auth_url)
-                    .status();
-            }
-            #[cfg(target_os = "windows")]
-            {
-                let _ = std::process::Command::new("rundll32")
-                    .args(["url.dll,FileProtocolHandler", &auth_url])
-                    .status();
-            }
-
-            let v = client
-                .call(
-                    "accounts.complete_oauth",
-                    serde_json::json!({
-                        "challenge_id": challenge_id,
-                        "label": label.unwrap_or_default(),
-                    }),
-                )
-                .await?;
-            println!("Account added:\n{}", serde_json::to_string_pretty(&v)?);
+            add_oauth_account(&mut client, "gmail", label).await?;
+        }
+        Cmd::Accounts(AccountsCmd::AddM365 { label }) => {
+            add_oauth_account(&mut client, "m365", label).await?;
         }
         Cmd::Accounts(AccountsCmd::Remove { id }) => {
             client
@@ -207,5 +180,50 @@ async fn main() -> Result<()> {
             println!("rejected");
         }
     }
+    Ok(())
+}
+
+async fn add_oauth_account(
+    client: &mut IpcClient,
+    provider: &str,
+    label: Option<String>,
+) -> Result<()> {
+    let v = client
+        .call(
+            "accounts.add_oauth",
+            serde_json::json!({ "provider": provider }),
+        )
+        .await?;
+    let challenge_id = v["challenge_id"].as_str().unwrap_or("").to_string();
+    let auth_url = v["auth_url"].as_str().unwrap_or("").to_string();
+    println!("Opening browser:\n  {auth_url}\nWaiting for sign-in to complete...");
+    // Best-effort browser launch.
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open").arg(&auth_url).status();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open")
+            .arg(&auth_url)
+            .status();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", &auth_url])
+            .status();
+    }
+
+    let v = client
+        .call(
+            "accounts.complete_oauth",
+            serde_json::json!({
+                "challenge_id": challenge_id,
+                "label": label.unwrap_or_default(),
+            }),
+        )
+        .await?;
+    println!("Account added:\n{}", serde_json::to_string_pretty(&v)?);
     Ok(())
 }

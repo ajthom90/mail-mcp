@@ -13,6 +13,9 @@ public final class WizardState {
     public var pendingChallengeId: String?
     public var pendingAuthURL: URL?
     public var addedAccountLabel: String?
+    /// Provider chosen on the AddAccount step. One of "gmail" or "m365".
+    /// Default is "gmail" so users who muscle-memory hit Continue still work.
+    public var selectedProvider: String = "gmail"
 
     public func advance() {
         if let next = Step(rawValue: step.rawValue + 1) { step = next }
